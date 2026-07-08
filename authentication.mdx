@@ -42,7 +42,7 @@ Include your API key as a Bearer token in the `Authorization` header of every re
 <CodeGroup>
 
 ```bash curl
-curl https://api.codecraftinghub.com/v1/patients \
+curl https://api.codecraftinghub.com/v1/patients/PATIENT_ID \
   -H "Authorization: Bearer YOUR_API_KEY"
 ```
 
@@ -55,20 +55,20 @@ headers = {
 }
 
 response = requests.get(
-    "https://api.codecraftinghub.com/v1/patients",
+    "https://api.codecraftinghub.com/v1/patients/PATIENT_ID",
     headers=headers
 )
-patients = response.json()
+patient = response.json()
 ```
 
 ```js Node.js
-const response = await fetch('https://api.codecraftinghub.com/v1/patients', {
+const response = await fetch('https://api.codecraftinghub.com/v1/patients/PATIENT_ID', {
   headers: {
     'Authorization': 'Bearer YOUR_API_KEY',
     'Content-Type': 'application/json'
   }
 });
-const patients = await response.json();
+const patient = await response.json();
 ```
 
 </CodeGroup>

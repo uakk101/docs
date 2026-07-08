@@ -1,7 +1,7 @@
 ---
-title: "Create a New Patient Record — POST /patients"
+title: "Create Patient — POST /patients | CodeCrafting Hub API"
 sidebarTitle: "POST /patients"
-description: "Create a new patient record in CodeCrafting Hub by submitting demographic and contact information via a single POST request."
+description: "Create a new patient record in CodeCrafting Hub by submitting required demographic and contact information via a single authenticated POST request."
 ---
 
 The Create Patient endpoint lets you register a new patient in the CodeCrafting Hub platform. You submit core demographic fields alongside optional contact, address, and coding data, and the API returns a fully populated patient object — including a platform-assigned ID and a Medical Record Number (MRN) — on success. Before calling this endpoint, make sure your API key carries the `read-write` or `admin` scope; requests authenticated with a `read`-only key will be rejected with `403 Forbidden`.

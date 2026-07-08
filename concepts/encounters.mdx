@@ -41,22 +41,19 @@ Every encounter follows a defined status progression from initial documentation 
   <Step title="draft">
     The encounter has been created but clinical documentation is incomplete. Draft encounters are editable in full — you can modify all fields including diagnoses, procedures, and provider. A draft encounter does not trigger any billing actions.
   </Step>
-  <Step title="in-progress">
-    The visit is actively occurring or documentation is underway. The encounter is locked for administrative edits (patient ID, provider NPI) but clinical content (diagnoses, procedures, notes) can still be updated. Transition to `in-progress` by updating the `status` field or when the provider signs an attached note.
+  <Step title="in_progress">
+    The visit is actively occurring or documentation is underway. The encounter is locked for administrative edits (patient ID, provider NPI) but clinical content (diagnoses, procedures, notes) can still be updated. Transition to `in_progress` by updating the `status` field or when the provider signs an attached note.
   </Step>
   <Step title="completed">
-    The visit is over and clinical documentation is finalized. A completed encounter is eligible for claim generation. You can trigger claim creation manually via `POST /encounters/{id}/generate-claim` or configure the platform to do so automatically upon completion.
+    The visit is over and clinical documentation is finalized. A completed encounter is eligible for claim submission. Submit a claim by calling `POST /claims` with the encounter's `id` as the `encounter_id`, or configure the platform to generate and submit claims automatically upon completion.
   </Step>
   <Step title="billed">
-    One or more claims have been generated and submitted to a payer from this encounter. The encounter is read-only at this stage. Addendum notes can still be attached, but core clinical data (diagnoses, procedures) requires an amendment workflow to modify.
-  </Step>
-  <Step title="closed">
-    All claims derived from this encounter have reached a terminal billing state (paid, denied with no appeal, or written off). The encounter is fully archived. No further billing actions are possible without reopening via a support workflow.
+    One or more claims have been generated and submitted to a payer from this encounter. The encounter is read-only at this stage. Addendum notes can still be attached, but core clinical data (diagnoses, procedures) requires an amendment workflow to modify. This is the terminal status for an encounter — once billed, no further lifecycle transitions occur.
   </Step>
 </Steps>
 
 <Warning>
-  Moving an encounter backwards in the lifecycle (e.g., from `completed` back to `in-progress`) is possible via `PATCH /encounters/{id}` only before any claims have been generated. Once a claim exists for an encounter, status reversals require contacting support and will create an audit event.
+  Moving an encounter backwards in the lifecycle (e.g., from `completed` back to `in_progress`) is not supported via the API. The `draft → in_progress → completed → billed` progression is strictly forward-only. If you need to correct a completed encounter before billing, contact support — any reversal will create an audit event.
 </Warning>
 
 ## Key Fields
@@ -110,19 +107,19 @@ You can attach structured clinical notes to any encounter using the Notes sub-re
 A completed encounter is the source of truth for claim generation. One encounter can produce multiple claims — for example, when services span multiple payers (primary and secondary insurance) or when a facility fee and a professional fee are billed separately.
 
 <Steps>
-  <Step title="Generate a claim from an encounter">
-    Call `POST /encounters/{id}/generate-claim` on any encounter with `status: completed`. The platform validates the encounter data, maps diagnoses and procedures to claim line items, and creates a Claim object linked to the encounter via `encounter_id`.
+  <Step title="Submit a claim from a completed encounter">
+    Call `POST /claims` with the `encounter_id` of any encounter in `completed` status. The platform validates the encounter data, maps diagnoses and procedures to claim line items, creates a Claim object, and immediately transmits it to the payer as an EDI 837P or 837I transaction. The encounter automatically advances to `billed` status.
   </Step>
-  <Step title="Review the generated claim">
-    The claim starts in `draft` status, giving you a chance to review before submission. Retrieve it with `GET /claims/{claim_id}` and inspect the line items, payer assignment, and charge totals.
+  <Step title="Retrieve the claim">
+    Fetch the claim at any time with `GET /claims/{claim_id}` to check its current status, payer assignment, allowed amounts, and payment details. The claim's `encounter_id` field links it back to the originating encounter.
   </Step>
-  <Step title="Submit the claim">
-    Call `POST /claims/{claim_id}/submit` to transmit the claim to the payer. The platform encodes it as an EDI 837P or 837I transaction and handles clearinghouse routing automatically.
+  <Step title="Track adjudication">
+    Poll `GET /claims/{claim_id}` or configure a webhook to receive real-time status updates as the claim moves from `submitted` through `accepted`, then to `paid` or `denied`.
   </Step>
 </Steps>
 
 <Info>
-  You can retrieve all claims associated with an encounter at `GET /encounters/{id}/claims`. An encounter in `billed` or `closed` status will always have at least one associated claim record.
+  You can retrieve all claims associated with an encounter by calling `GET /encounters/{id}?include=claims`. An encounter in `billed` status will always have at least one associated claim record in the response.
 </Info>
 
 ## Sample Encounter Object

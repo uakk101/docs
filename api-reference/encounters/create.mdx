@@ -1,10 +1,10 @@
 ---
 title: "POST /encounters — Create a New Clinical Encounter"
-sidebarTitle: "POST /encounters"
+sidebarTitle: "Create Encounter"
 description: "Create a new clinical encounter for a patient, capturing diagnoses, procedures, place of service, and encounter type in a single request."
 ---
 
-When a patient visit begins, you create an encounter to anchor every clinical and billing event that follows. This endpoint opens a new encounter record in the `in_progress` status and accepts diagnoses and procedures up front so downstream claim submission can start immediately. You need the `read-write` or `admin` scope to call this endpoint.
+When a patient visit begins, you create an encounter to anchor every clinical and billing event that follows. This endpoint opens a new encounter record in the `draft` status and accepts diagnoses and procedures up front so downstream claim submission can start as soon as documentation is complete. You need the `read-write` or `admin` scope to call this endpoint.
 
 ## Request
 
@@ -184,7 +184,7 @@ A successful request returns HTTP **201 Created** with the newly created encount
 </ResponseField>
 
 <ResponseField name="status" type="string">
-  Current lifecycle status. Newly created encounters start as `in_progress`.
+  Current lifecycle status. Newly created encounters start as `draft`.
 </ResponseField>
 
 <ResponseField name="diagnoses" type="array">
@@ -207,7 +207,7 @@ A successful request returns HTTP **201 Created** with the newly created encount
   "service_date": "2024-01-15",
   "encounter_type": "office_visit",
   "place_of_service": "11",
-  "status": "in_progress",
+  "status": "draft",
   "diagnoses": [
     {
       "code": "J06.9",

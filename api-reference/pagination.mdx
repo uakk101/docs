@@ -1,7 +1,7 @@
 ---
-title: "Pagination — CodeCrafting Hub REST API"
+title: "Pagination — CodeCrafting Hub API Developer Reference"
 sidebarTitle: "Pagination"
-description: "Navigate large result sets with page-based or cursor-based pagination, understand the response envelope, and iterate efficiently in code."
+description: "Navigate large result sets using page-based or cursor-based pagination, understand the response envelope, and iterate efficiently in code."
 ---
 
 Every list endpoint in the CodeCrafting Hub API returns a paginated response rather than dumping all matching records at once. This keeps response times fast, memory usage predictable, and your integration stable even as your data volume grows into the hundreds of thousands of records. Two pagination strategies are available depending on the endpoint and your use case: **page-based** pagination for most general queries and **cursor-based** pagination for high-volume or streaming workloads.

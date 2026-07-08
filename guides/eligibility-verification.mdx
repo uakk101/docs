@@ -19,7 +19,7 @@ Run an eligibility check at these points in the patient workflow:
 - **Day of service** — The definitive check that drives copay collection and claim submission.
 
 <Tip>
-  Use the **batch eligibility** endpoint (`POST /eligibility/batch`) to run overnight checks for all patients scheduled the following day in a single API call. See [Real-Time vs. Batch Eligibility](#real-time-vs-batch-eligibility) below.
+  Check eligibility at all three points listed above. A policy that was active at scheduling may have lapsed by the time of the visit—catching the change early gives you time to collect updated information from the patient.
 </Tip>
 
 ---
@@ -196,7 +196,7 @@ When `coverage_active` is `false`, follow this workflow before proceeding with t
     Inform the patient that their coverage on file is inactive and ask them to provide an updated insurance card.
   </Step>
   <Step title="Update the insurance policy">
-    Call `PUT /patients/{id}/insurance/{policy_id}` with the corrected payer ID, member ID, or effective date, or add a new policy with `POST /patients/{id}/insurance`.
+    Add a corrected policy with `POST /patients/{id}/insurance`, supplying the updated payer ID, member ID, and effective date from the patient's new insurance card.
   </Step>
   <Step title="Re-run eligibility">
     Submit a new `POST /eligibility/check` request with the updated policy details to confirm the correction resolved the issue.
@@ -212,96 +212,6 @@ When `coverage_active` is `false`, follow this workflow before proceeding with t
 
 ---
 
-## Step 5 — Real-Time vs. Batch Eligibility
-
-<Tabs>
-  <Tab title="Real-Time (Single Patient)">
-    Use `POST /eligibility/check` for on-demand checks triggered by scheduling events, patient arrivals, or manual staff requests. The response is synchronous and returns in under five seconds for most payers.
-
-    **Best for:** Individual patient check-in, same-day scheduling, urgent care walk-ins.
-
-    ```bash curl
-    curl --request POST \
-      --url https://api.codecraftinghub.com/v1/eligibility/check \
-      --header "Authorization: Bearer YOUR_API_KEY" \
-      --header "Content-Type: application/json" \
-      --data '{
-        "patient_id": "pat_01HX9Z2K3M4N5P6Q7R8S9T0U",
-        "payer_id": "payer_bcbs_tx_001",
-        "service_date": "2024-01-15",
-        "provider_npi": "1234567890",
-        "service_type_code": "30"
-      }'
-    ```
-  </Tab>
-  <Tab title="Batch (Multiple Patients)">
-    Use `POST /eligibility/batch` to check eligibility for a list of patients in a single call. The endpoint accepts up to 500 patients per request and processes them asynchronously. Poll `GET /eligibility/batch/{batch_id}` for results.
-
-    **Best for:** Overnight pre-verification of the next day's schedule, large-volume practices.
-
-    ```bash curl
-    curl --request POST \
-      --url https://api.codecraftinghub.com/v1/eligibility/batch \
-      --header "Authorization: Bearer YOUR_API_KEY" \
-      --header "Content-Type: application/json" \
-      --data '{
-        "service_date": "2024-01-16",
-        "provider_npi": "1234567890",
-        "checks": [
-          {"patient_id": "pat_01HX9Z2K3M4N5P6Q7R8S9T0U", "payer_id": "payer_bcbs_tx_001"},
-          {"patient_id": "pat_02HX9Z2K3M4N5P6Q7R8S9T0V", "payer_id": "payer_aetna_001"},
-          {"patient_id": "pat_03HX9Z2K3M4N5P6Q7R8S9T0W", "payer_id": "payer_uhc_001"}
-        ]
-      }'
-    ```
-
-    ```python Python
-    import requests, time
-
-    headers = {
-        "Authorization": "Bearer YOUR_API_KEY",
-        "Content-Type": "application/json",
-    }
-
-    # Submit batch
-    batch_response = requests.post(
-        "https://api.codecraftinghub.com/v1/eligibility/batch",
-        json={
-            "service_date": "2024-01-16",
-            "provider_npi": "1234567890",
-            "checks": [
-                {"patient_id": "pat_01HX9Z2K3M4N5P6Q7R8S9T0U", "payer_id": "payer_bcbs_tx_001"},
-                {"patient_id": "pat_02HX9Z2K3M4N5P6Q7R8S9T0V", "payer_id": "payer_aetna_001"},
-            ],
-        },
-        headers=headers,
-    )
-    batch_response.raise_for_status()
-    batch_id = batch_response.json()["batch_id"]
-
-    # Poll for results
-    while True:
-        result = requests.get(
-            f"https://api.codecraftinghub.com/v1/eligibility/batch/{batch_id}",
-            headers={"Authorization": "Bearer YOUR_API_KEY"},
-        )
-        result.raise_for_status()
-        data = result.json()
-        if data["status"] == "completed":
-            for check in data["results"]:
-                print(f"{check['patient_id']}: active={check['coverage_active']}")
-            break
-        time.sleep(30)
-    ```
-
-    <Note>
-      Batch results are available for 72 hours. Download and store them in your system before that window expires.
-    </Note>
-  </Tab>
-</Tabs>
-
----
-
 ## Complete Eligibility Verification Flow
 
 <Steps>
@@ -309,7 +219,7 @@ When `coverage_active` is `false`, follow this workflow before proceeding with t
     Collect `patient_id`, `payer_id`, `service_date`, `provider_npi`, and `service_type_code` before making the API call.
   </Step>
   <Step title="POST /eligibility/check">
-    Submit the eligibility request. For bulk pre-verification, use `POST /eligibility/batch` the night before.
+    Submit the eligibility request. Repeat this call at scheduling, 24–48 hours before the appointment, and on the day of service.
   </Step>
   <Step title="Check coverage_active">
     If `true`, extract deductible and copay data for front-desk collection. If `false`, update the patient's insurance and recheck.

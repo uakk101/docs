@@ -1,6 +1,6 @@
 ---
 title: "PUT /encounters/{id} — Update a Clinical Encounter"
-sidebarTitle: "PUT /encounters/{id}"
+sidebarTitle: "Update Encounter"
 description: "Update an existing encounter to add diagnoses, modify procedures, adjust place of service, or advance its lifecycle status toward billing."
 ---
 
@@ -11,7 +11,7 @@ As a clinical encounter progresses from documentation to billing, you use this e
 Encounters follow a strict forward-only status progression. You cannot revert a status to an earlier state.
 
 ```
-draft → in_progress → completed → billed
+draft → in_progress → completed → billed → closed
 ```
 
 <Warning>
@@ -78,7 +78,7 @@ draft → in_progress → completed → billed
 </ParamField>
 
 <ParamField body="status" type="string">
-  Advance the encounter to the next lifecycle status. Must follow the `draft → in_progress → completed → billed` sequence.
+  Advance the encounter to the next lifecycle status. Must follow the `draft → in_progress → completed → billed → closed` sequence.
 </ParamField>
 
 <CodeGroup>
@@ -204,5 +204,5 @@ A successful request returns HTTP **200 OK** with the full updated encounter obj
 ```
 
 <Note>
-  Attempting an invalid status transition (e.g., jumping from `draft` directly to `billed`) returns a `422 Unprocessable Entity` error with a `status_transition_invalid` error code.
+  Attempting an invalid status transition (e.g., jumping from `draft` directly to `billed`) returns a `422 Unprocessable Entity` error with a `status_transition_invalid` error code. Note that `closed` is the terminal state—no further updates are permitted once an encounter reaches `closed`.
 </Note>

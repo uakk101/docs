@@ -1,7 +1,7 @@
 ---
-title: "FHIR R4 Compliance & Interoperability Guide"
+title: "FHIR R4 Compliance and Interoperability Guide for EHR"
 sidebarTitle: "FHIR R4"
-description: "Access FHIR R4 resources, perform bulk exports, and integrate with US Core and SMART on FHIR using CodeCrafting Hub's API."
+description: "Learn how to access FHIR R4 resources, run bulk exports, and integrate with US Core and SMART on FHIR using CodeCrafting Hub EHR API."
 ---
 
 CodeCrafting Hub exposes a fully conformant FHIR R4 API layer alongside its native REST endpoints, giving you interoperability with any FHIR-aware system out of the box. All FHIR resources are read and written through the dedicated FHIR base URL, and every response conforms to the HL7 FHIR R4 specification.
@@ -61,7 +61,7 @@ curl https://api.codecraftinghub.com/fhir/r4/Patient/pat_01HX9Z2K3M4N5P6Q7R8S9T0
       "value": "pat_01HX9Z2K3M4N5P6Q7R8S9T0U"
     },
     {
-      "system": "http://hl7.org/fhir/sid/us-npi",
+      "system": "https://api.codecraftinghub.com/fhir/r4/NamingSystem/mrn",
       "value": "MRN-00042"
     }
   ],

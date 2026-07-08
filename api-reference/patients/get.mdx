@@ -1,7 +1,7 @@
 ---
-title: "Retrieve a Patient Record — GET /patients/{id}"
+title: "Get Patient — GET /patients/{id} | CodeCrafting Hub API"
 sidebarTitle: "GET /patients/{id}"
-description: "Fetch a single patient record by its platform ID and receive the full demographic and contact profile in a single response."
+description: "Fetch a single patient record by its platform-assigned ID and receive the full demographic and contact profile in a single API response."
 ---
 
 The Retrieve Patient endpoint returns the complete record for a single patient identified by their platform-assigned ID. You can call this endpoint with any API key scoped to `read`, `read-write`, or `admin` — it is safe to use in read-heavy workflows such as pre-visit chart pulls, eligibility checks, or dashboard lookups without risk of modifying data. The patient ID is the `pat_`-prefixed value returned when the record was first created.

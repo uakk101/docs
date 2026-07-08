@@ -1,17 +1,14 @@
 ---
-title: "Rate Limits — CodeCrafting Hub REST API"
+title: "Rate Limits — CodeCrafting Hub API Reference Guide"
 sidebarTitle: "Rate Limits"
-description: "Understand per-key request quotas, rate limit response headers, 429 error handling, and best practices like exponential backoff."
+description: "Understand per-key request quotas, rate limit response headers, 429 error handling, and best practices like exponential backoff for all plan tiers."
 ---
 
 The CodeCrafting Hub API enforces rate limits to ensure stable, fair performance for every customer on the platform. When you exceed your quota, the API returns a `429 Too Many Requests` response rather than processing the request. Understanding the limits that apply to your plan — and implementing a well-behaved retry strategy — keeps your integration running smoothly.
 
 ## Default Limits
 
-Every API key is subject to two independent limits that are both enforced simultaneously:
-
-- **Rate limit window:** 1,000 requests per minute
-- **Burst limit:** 100 requests per second
+Every API key is subject to two independent limits that are both enforced simultaneously: a **per-minute rate limit** and a **per-second burst limit**. The specific values depend on the plan associated with your account — see the table in the next section for a breakdown by tier.
 
 Exceeding either limit triggers a `429` response for that request. The per-minute window resets on a rolling basis, not at a fixed clock boundary.
 

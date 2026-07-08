@@ -1,6 +1,6 @@
 ---
 title: "GET /encounters/{id} — Retrieve a Clinical Encounter"
-sidebarTitle: "GET /encounters/{id}"
+sidebarTitle: "Get Encounter"
 description: "Fetch a single clinical encounter by its platform ID, with optional sideloading of related clinical notes and associated insurance claims."
 ---
 
@@ -76,7 +76,7 @@ A successful request returns HTTP **200 OK** with the encounter object. When `in
 </ResponseField>
 
 <ResponseField name="status" type="string">
-  Current lifecycle status: `draft`, `in_progress`, `completed`, or `billed`.
+  Current lifecycle status: `draft`, `in_progress`, `completed`, `billed`, or `closed`.
 </ResponseField>
 
 <ResponseField name="diagnoses" type="array">

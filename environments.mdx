@@ -1,7 +1,7 @@
 ---
-title: "Sandbox and Production Environments Explained"
+title: "CodeCrafting Hub API: Sandbox and Production Environments"
 sidebarTitle: "Environments"
-description: "CodeCrafting Hub provides separate Sandbox and Production environments. Test safely with synthetic data before processing real claims and PHI in production."
+description: "CodeCrafting Hub provides Sandbox and Production environments. Test safely with synthetic data before processing real claims and PHI in production."
 ---
 
 CodeCrafting Hub separates your development and live workloads into two fully isolated environments: **Sandbox** and **Production**. Both environments expose the same REST API surface and accept the same request shapes, so you can build and test your integration completely in the sandbox and then promote to production by swapping the base URL and API key — no code changes required. Understanding what each environment does (and doesn't do) is critical before you start handling real patient data or submitting live claims to payers.
@@ -23,7 +23,7 @@ CodeCrafting Hub separates your development and live workloads into two fully is
     **Example request:**
 
     ```bash
-    curl https://sandbox.api.codecraftinghub.com/v1/health \
+    curl https://sandbox.api.codecraftinghub.com/v1/appointments \
       -H "Authorization: Bearer cch_test_YOUR_SANDBOX_KEY"
     ```
 
@@ -39,7 +39,7 @@ CodeCrafting Hub separates your development and live workloads into two fully is
     **Example request:**
 
     ```bash
-    curl https://api.codecraftinghub.com/v1/health \
+    curl https://api.codecraftinghub.com/v1/appointments \
       -H "Authorization: Bearer cch_live_YOUR_PRODUCTION_KEY"
     ```
 
@@ -158,7 +158,7 @@ When you're ready to go live, complete these steps before switching to the produ
 </Step>
 
 <Step title="Complete the Security Checklist">
-  Review the [Claims Submission guide](/guides/claims-submission) to confirm your integration handles authentication securely, logs appropriately, and implements retry/backoff logic.
+  Review the [Security Best Practices](/authentication#security-best-practices) guide and the [Claims Submission guide](/guides/claims-submission) to confirm your integration stores credentials securely, handles errors gracefully, and retries failed requests with exponential backoff.
 </Step>
 
 <Step title="Generate a Production Key">

@@ -30,12 +30,12 @@ export CCH_API_KEY="cch_test_YOUR_KEY_HERE"
 
 <Step title="Verify Your Connection">
 
-Before writing any integration code, confirm your key is valid and the API is reachable by calling the health endpoint.
+Before writing any integration code, confirm your key is valid and the API is reachable by making an authenticated request to the appointments endpoint.
 
 <CodeGroup>
 
 ```bash cURL
-curl -s https://sandbox.api.codecraftinghub.com/v1/health \
+curl -s https://sandbox.api.codecraftinghub.com/v1/appointments \
   -H "Authorization: Bearer $CCH_API_KEY"
 ```
 
@@ -47,7 +47,7 @@ api_key = os.environ["CCH_API_KEY"]
 base_url = "https://sandbox.api.codecraftinghub.com/v1"
 
 response = requests.get(
-    f"{base_url}/health",
+    f"{base_url}/appointments",
     headers={"Authorization": f"Bearer {api_key}"},
 )
 print(response.json())
@@ -55,14 +55,13 @@ print(response.json())
 
 </CodeGroup>
 
-A successful response looks like this:
+A successful `200 OK` response returns an empty appointments list (the sandbox account has no appointments yet):
 
 ```json
 {
-  "status": "ok",
-  "environment": "sandbox",
-  "version": "1.0.0",
-  "timestamp": "2024-01-15T10:00:00Z"
+  "data": [],
+  "total": 0,
+  "page": 1
 }
 ```
 

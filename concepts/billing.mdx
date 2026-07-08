@@ -13,7 +13,7 @@ Revenue Cycle Management (RCM) is the end-to-end financial process that begins t
     Collect and verify patient demographics and insurance information before the visit. Accurate registration data is the single biggest factor in downstream claim acceptance rates. Create or update the patient record at `POST /patients` and attach insurance policies at `POST /patients/{id}/insurance-policies`.
   </Step>
   <Step title="Eligibility Verification">
-    Before the patient is seen, verify their insurance coverage in real time against the payer. Send a `POST /eligibility/verify` request with the patient's insurance policy ID and service date. The platform transmits an EDI 270 transaction and returns a structured 271 response with benefit details, copay/deductible amounts, and coverage limitations.
+    Before the patient is seen, verify their insurance coverage in real time against the payer. Send a `POST /eligibility/check` request with the patient ID, payer ID, rendering provider NPI, and service date. The platform transmits an EDI 270 transaction and returns a structured 271 response with benefit details, copay/deductible amounts, and coverage limitations.
 
     <Tip>
       Configure automatic eligibility verification on appointment confirmation by enabling the `auto_verify_eligibility` setting on your organization. The platform will check eligibility 72 hours, 24 hours, and at the time of check-in.
@@ -59,7 +59,7 @@ CodeCrafting Hub supports both major claim form types. The `claim_type` field on
     **Common use cases:** inpatient admissions, outpatient hospital services, emergency department facility fees, SNF stays.
 
     <Note>
-      Institutional claim generation requires additional encounter fields (`admission_date`, `discharge_date`, `revenue_codes`) beyond those required for professional claims. Verify your encounter object is complete before calling `generate-claim` for inpatient encounters.
+      Institutional claim submission requires additional encounter fields (`admission_date`, `discharge_date`, `revenue_codes`) beyond those required for professional claims. Verify your encounter object is complete before calling `POST /claims` for inpatient encounters.
     </Note>
   </Tab>
 </Tabs>
@@ -88,26 +88,25 @@ Real-time eligibility verification lets you confirm a patient's active coverage,
 
 <CodeGroup>
   ```json Request
-  POST /eligibility/verify
+  POST /eligibility/check
   {
     "patient_id": "pat_01HX9Z2K3M4N5P6Q7R8S9T0U",
-    "insurance_policy_id": "pol_01HXC1D2E3F4G5H6I7J8K9L0M",
+    "payer_id": "payer_bcbs_tx_001",
+    "provider_npi": "1234567890",
     "service_date": "2024-01-15",
-    "service_type_codes": ["30", "98"]
+    "service_type_code": "30"
   }
   ```
   ```json Response
   {
-    "status": "active",
-    "subscriber_name": "Jane Smith",
-    "member_id": "BCB123456789",
-    "group_number": "GRP-00100",
+    "id": "elig_01HXC1D2E3F4G5H6I7J8K9L0M",
+    "coverage_active": true,
     "plan_name": "BCBS TX PPO Gold",
+    "member_id": "BCB123456789",
     "deductible": {"individual": 1500.00, "met": 425.00, "remaining": 1075.00},
     "out_of_pocket_max": {"individual": 5000.00, "met": 425.00, "remaining": 4575.00},
     "copay": {"primary_care": 30.00, "specialist": 60.00},
-    "coinsurance": 0.20,
-    "verified_at": "2024-01-15T09:00:00Z"
+    "checked_at": "2024-01-15T09:00:00Z"
   }
   ```
 </CodeGroup>

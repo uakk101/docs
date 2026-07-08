@@ -1,7 +1,7 @@
 ---
-title: "API Overview — CodeCrafting Hub REST API"
+title: "API Overview — CodeCrafting Hub Developer Reference"
 sidebarTitle: "Overview"
-description: "Everything you need to start making requests: base URLs, authentication, request and response formats, versioning, and available SDKs."
+description: "Everything you need to start making requests: base URLs, authentication, request and response formats, versioning, and available SDKs for CodeCrafting Hub."
 ---
 
 The CodeCrafting Hub API gives you programmatic access to the full suite of EHR and RCM capabilities — patient records, encounters, claims, eligibility checks, appointments, and more. Every interaction follows standard REST conventions: you send JSON over HTTPS, and you receive a consistent JSON envelope in return. This page explains the foundational concepts that apply to every endpoint in the API.
@@ -89,7 +89,7 @@ All timestamps in request bodies and responses use **ISO 8601 format in UTC**, f
 
 ## Response Format
 
-Every response body is JSON. Single-resource responses return the object directly under a `data` key. List responses wrap the array and include a `pagination` object:
+Every response body is JSON. Single-resource responses (create, retrieve, update) return the object directly as the top-level response body. List responses wrap the array in a `data` key and include a `pagination` object:
 
 ```json
 {
@@ -115,7 +115,7 @@ Error responses always include a human-readable `message`, a machine-readable `e
 ```
 
 <Tip>
-  Log and store `request_id` values from error responses. When you contact CodeCrafting Hub support, providing the `request_id` lets the support team locate the exact request in internal traces immediately.
+  Log and store `request_id` values from error responses. When you contact CodeCrafting Hub support, providing the `request_id` lets the support team locate the exact request in our systems immediately.
 </Tip>
 
 ### Standard HTTP Status Codes
