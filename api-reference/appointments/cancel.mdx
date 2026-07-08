@@ -1,0 +1,101 @@
+---
+title: "DELETE /appointments/{id} — Cancel a Scheduled Appointment"
+sidebarTitle: "DELETE /appointments/{id}"
+description: "Cancel a scheduled or confirmed appointment by its platform ID and record an optional cancellation reason for audit trails and reporting."
+---
+
+When a patient or provider needs to cancel an appointment, you send a DELETE request to this endpoint to transition the appointment to `cancelled` status and record the reason. Cancelled appointments are retained in the system for audit and reporting purposes—they are soft-deleted and remain queryable via [GET /appointments](/api-reference/appointments/list) with a `status=cancelled` filter. You need at minimum the `read-write` scope to call this endpoint.
+
+## Request
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token for API authentication. Format: `Bearer YOUR_API_KEY`.
+</ParamField>
+
+<ParamField path="id" type="string" required>
+  The platform identifier of the appointment to cancel. Prefix: `appt_`.
+</ParamField>
+
+<ParamField body="reason" type="string">
+  A human-readable explanation for the cancellation. This is stored on the appointment record and surfaced in scheduling reports. Highly recommended for patient communication workflows and no-show tracking.
+</ParamField>
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE https://api.codecraftinghub.com/v1/appointments/appt_01HXI1J2K3L4M5N6O7P8Q9R0S \
+  -H 'Authorization: Bearer YOUR_API_KEY' \
+  -H 'Content-Type: application/json' \
+  -d '{"reason": "Patient requested cancellation"}'
+```
+
+```python Python
+import httpx
+
+appointment_id = "appt_01HXI1J2K3L4M5N6O7P8Q9R0S"
+
+response = httpx.delete(
+    f"https://api.codecraftinghub.com/v1/appointments/{appointment_id}",
+    headers={"Authorization": "Bearer YOUR_API_KEY"},
+    json={"reason": "Patient requested cancellation"},
+)
+
+if response.status_code == 200:
+    result = response.json()
+    print(result["status"])  # "cancelled"
+```
+</CodeGroup>
+
+<Warning>
+  You cannot cancel an appointment that has already reached `completed` or `cancelled` status. Attempting to do so returns **409 Conflict**. Check the current appointment status via [GET /appointments](/api-reference/appointments/list) before sending a cancellation request if your workflow may encounter already-finalized appointments.
+</Warning>
+
+<Note>
+  Cancelling an appointment does not automatically cancel any associated encounters or claims. If an encounter was already created for this appointment, manage its lifecycle separately through [PUT /encounters/{id}](/api-reference/encounters/update).
+</Note>
+
+## Response
+
+A successful cancellation returns HTTP **200 OK** with the updated appointment object.
+
+<ResponseField name="id" type="string">
+  Platform identifier of the cancelled appointment. Prefix: `appt_`.
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Updated status. Always `cancelled` on a successful response.
+</ResponseField>
+
+<ResponseField name="cancelled_at" type="string">
+  ISO 8601 timestamp of when the cancellation was processed.
+</ResponseField>
+
+<ResponseField name="cancellation_reason" type="string">
+  The reason string as submitted, if provided.
+</ResponseField>
+
+```json 200 OK
+{
+  "id": "appt_01HXI1J2K3L4M5N6O7P8Q9R0S",
+  "status": "cancelled",
+  "cancelled_at": "2024-01-16T10:00:00Z",
+  "cancellation_reason": "Patient requested cancellation"
+}
+```
+
+```json 404 Not Found
+{
+  "error": "not_found",
+  "message": "Appointment appt_01HXI1J2K3L4M5N6O7P8Q9R0S does not exist."
+}
+```
+
+```json 409 Conflict
+{
+  "error": "invalid_status_transition",
+  "message": "Cannot cancel an appointment with status 'completed'."
+}
+```
+
+<Tip>
+  Build a cancellation notification workflow by listening for `appointment.cancelled` webhook events rather than polling the API. The event payload includes the `cancellation_reason` so you can tailor patient-facing messaging automatically.
+</Tip>

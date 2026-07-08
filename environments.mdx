@@ -1,0 +1,184 @@
+---
+title: "Sandbox and Production Environments Explained"
+sidebarTitle: "Environments"
+description: "CodeCrafting Hub provides separate Sandbox and Production environments. Test safely with synthetic data before processing real claims and PHI in production."
+---
+
+CodeCrafting Hub separates your development and live workloads into two fully isolated environments: **Sandbox** and **Production**. Both environments expose the same REST API surface and accept the same request shapes, so you can build and test your integration completely in the sandbox and then promote to production by swapping the base URL and API key — no code changes required. Understanding what each environment does (and doesn't do) is critical before you start handling real patient data or submitting live claims to payers.
+
+<Warning>
+  Never send real Protected Health Information (PHI) to the sandbox environment. The sandbox is not covered by the same security controls as production and is intended for synthetic test data only. Sending real patient data to sandbox may constitute a HIPAA violation.
+</Warning>
+
+## Base URLs
+
+<Tabs>
+  <Tab title="Sandbox">
+    Use the sandbox base URL for all development, testing, and CI/CD pipeline requests. No real claims are submitted to payers and no real PHI is processed.
+
+    ```
+    https://sandbox.api.codecraftinghub.com/v1
+    ```
+
+    **Example request:**
+
+    ```bash
+    curl https://sandbox.api.codecraftinghub.com/v1/health \
+      -H "Authorization: Bearer cch_test_YOUR_SANDBOX_KEY"
+    ```
+
+    Sandbox API keys are prefixed with `cch_test_`. Generate yours in the [Dashboard](https://dashboard.codecraftinghub.com) under **Settings → API Keys → Sandbox Keys**.
+  </Tab>
+  <Tab title="Production">
+    Use the production base URL only when your integration is fully tested and you are ready to process real patient data and submit live claims to payers. Your Business Associate Agreement (BAA) must be active before making production calls.
+
+    ```
+    https://api.codecraftinghub.com/v1
+    ```
+
+    **Example request:**
+
+    ```bash
+    curl https://api.codecraftinghub.com/v1/health \
+      -H "Authorization: Bearer cch_live_YOUR_PRODUCTION_KEY"
+    ```
+
+    Production API keys are prefixed with `cch_live_`. Generate yours in the [Dashboard](https://dashboard.codecraftinghub.com) under **Settings → API Keys → Production Keys**.
+  </Tab>
+</Tabs>
+
+## Environment Comparison
+
+| Feature | Sandbox | Production |
+|---|---|---|
+| **Base URL** | `https://sandbox.api.codecraftinghub.com/v1` | `https://api.codecraftinghub.com/v1` |
+| **API key prefix** | `cch_test_` | `cch_live_` |
+| **Real PHI allowed** | ❌ No | ✅ Yes |
+| **Real claims submitted to payers** | ❌ No (simulated) | ✅ Yes |
+| **Real eligibility checks** | ❌ No (simulated responses) | ✅ Yes |
+| **Real payment processing** | ❌ No | ✅ Yes |
+| **BAA required** | ❌ No | ✅ Yes |
+| **Data retention** | 30 days (auto-purged) | Per your data retention policy |
+| **Uptime SLA** | Best effort | 99.9% guaranteed |
+| **Rate limits** | 100 requests/minute | 1,000 requests/minute (scalable) |
+| **FHIR R4 compliance** | ✅ Yes | ✅ Yes |
+
+## Getting API Keys
+
+<Steps>
+
+<Step title="Log in to the Dashboard">
+  Navigate to [dashboard.codecraftinghub.com](https://dashboard.codecraftinghub.com) and sign in with your organization credentials.
+</Step>
+
+<Step title="Open API Key Settings">
+  In the left navigation, click **Settings**, then select **API Keys**. You'll see separate sections for **Sandbox Keys** and **Production Keys**.
+</Step>
+
+<Step title="Create a New Key">
+  Click **Create New Key** under the appropriate section. Enter a descriptive name (e.g., `ci-pipeline-sandbox` or `production-billing-service`) and click **Generate**.
+</Step>
+
+<Step title="Copy and Store Securely">
+  Copy the key value immediately — it is shown only once. Store it in a secrets manager (AWS Secrets Manager, HashiCorp Vault, etc.) or as an encrypted environment variable. Never commit API keys to source control.
+
+  <Warning>
+    If you suspect a key has been compromised, revoke it immediately from the Dashboard and generate a replacement. Revocation takes effect within 60 seconds.
+  </Warning>
+</Step>
+
+</Steps>
+
+## Sandbox Test Data
+
+The sandbox environment provides pre-seeded test identifiers you can use without creating resources from scratch. These identifiers are available in every sandbox account.
+
+### Test Patient
+
+Use this patient ID to test encounter creation, claim submission, and eligibility verification workflows immediately:
+
+| Field | Value |
+|---|---|
+| **Patient ID** | `pat_test_sandbox_001` |
+| **Name** | Test Patient One |
+| **Date of Birth** | 1970-01-01 |
+| **MRN** | `MRN-TEST-001` |
+
+```bash
+# Fetch the pre-seeded test patient
+curl https://sandbox.api.codecraftinghub.com/v1/patients/pat_test_sandbox_001 \
+  -H "Authorization: Bearer $CCH_API_KEY"
+```
+
+### Test Payer
+
+Use this payer ID to simulate claim submission and adjudication against a Blue Cross Blue Shield test payer:
+
+| Field | Value |
+|---|---|
+| **Payer ID** | `payer_test_bcbs_001` |
+| **Payer Name** | Blue Cross Blue Shield (Test) |
+| **Supports Eligibility** | ✅ Yes (simulated) |
+| **Supports ERA** | ✅ Yes (simulated) |
+
+### Test Provider NPI
+
+Use this NPI for all sandbox encounters and claims. It is pre-credentialed against all sandbox test payers:
+
+| Field | Value |
+|---|---|
+| **Provider NPI** | `0000000001` |
+| **Provider Name** | Test Provider One |
+| **Specialty** | Internal Medicine |
+
+<Tip>
+  You can combine these three test identifiers — `pat_test_sandbox_001`, `payer_test_bcbs_001`, and NPI `0000000001` — to run a complete patient → encounter → claim workflow without creating any resources first. This is useful for smoke-testing your integration setup.
+</Tip>
+
+## Simulated Adjudication in Sandbox
+
+When you submit a claim in the sandbox, CodeCrafting Hub runs it through a simulated adjudication engine rather than forwarding it to a real payer. Adjudication outcomes are deterministic based on the claim contents:
+
+- Claims with **CPT code `99213`** and a valid diagnosis adjudicate as **paid** within ~30 seconds.
+- Claims with **CPT code `99999`** (invalid) return a **denial** with reason code `CO-4` (invalid procedure code).
+- Claims missing a required field return a `422 Unprocessable Entity` error synchronously before submission.
+
+<Info>
+  Subscribe to the `claim.adjudicated` webhook event to receive adjudication results in real time without polling. See the [Webhooks](/guides/webhooks) documentation for event payloads and subscription setup.
+</Info>
+
+## Promoting to Production
+
+When you're ready to go live, complete these steps before switching to the production environment:
+
+<Steps>
+
+<Step title="Execute Your BAA">
+  Download and sign the Business Associate Agreement from **Dashboard → Settings → Compliance**. You cannot generate production API keys until the BAA is countersigned by CodeCrafting Hub.
+</Step>
+
+<Step title="Complete the Security Checklist">
+  Review the [Claims Submission guide](/guides/claims-submission) to confirm your integration handles authentication securely, logs appropriately, and implements retry/backoff logic.
+</Step>
+
+<Step title="Generate a Production Key">
+  Follow the key creation steps above under **Production Keys** in the Dashboard. Store the `cch_live_` key in your production secrets infrastructure.
+</Step>
+
+<Step title="Update Your Base URL and Key">
+  Replace the sandbox base URL and test key in your configuration:
+
+  ```bash
+  # Before (sandbox)
+  export CCH_BASE_URL="https://sandbox.api.codecraftinghub.com/v1"
+  export CCH_API_KEY="cch_test_..."
+
+  # After (production)
+  export CCH_BASE_URL="https://api.codecraftinghub.com/v1"
+  export CCH_API_KEY="cch_live_..."
+  ```
+
+  No other code changes are required.
+</Step>
+
+</Steps>

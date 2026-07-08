@@ -1,0 +1,152 @@
+---
+title: "API Overview — CodeCrafting Hub REST API"
+sidebarTitle: "Overview"
+description: "Everything you need to start making requests: base URLs, authentication, request and response formats, versioning, and available SDKs."
+---
+
+The CodeCrafting Hub API gives you programmatic access to the full suite of EHR and RCM capabilities — patient records, encounters, claims, eligibility checks, appointments, and more. Every interaction follows standard REST conventions: you send JSON over HTTPS, and you receive a consistent JSON envelope in return. This page explains the foundational concepts that apply to every endpoint in the API.
+
+## Base URLs
+
+All REST API requests are made against the following base URL:
+
+```
+https://api.codecraftinghub.com/v1
+```
+
+If you are working with FHIR-compliant resources, use the dedicated FHIR R4 base URL instead:
+
+```
+https://api.codecraftinghub.com/fhir/r4
+```
+
+<Info>
+  The FHIR R4 base URL follows the HL7 FHIR R4 specification and supports standard FHIR resource types such as `Patient`, `Encounter`, `Claim`, and `Coverage`. Use the REST base URL for all CodeCrafting Hub-native endpoints.
+</Info>
+
+## Authentication
+
+You authenticate every request by passing your API key as a Bearer token in the `Authorization` header. You can generate and rotate API keys from the **Settings → API Keys** section of your dashboard.
+
+```bash
+Authorization: Bearer YOUR_API_KEY
+```
+
+<Warning>
+  Never expose your API key in client-side code, public repositories, or logs. If a key is compromised, rotate it immediately from the dashboard — the old key is invalidated the moment you generate a replacement.
+</Warning>
+
+Here is a minimal authenticated request to verify your credentials:
+
+```bash
+curl https://api.codecraftinghub.com/v1/ping \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+## Request Format
+
+Send all request bodies as JSON and include the `Content-Type: application/json` header on every `POST`, `PUT`, and `PATCH` request.
+
+```bash
+curl -X POST https://api.codecraftinghub.com/v1/patients \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "first_name": "Alice",
+    "last_name": "Brown",
+    "date_of_birth": "1985-04-12"
+  }'
+```
+
+### HTTP Methods
+
+The API uses standard HTTP verbs according to their conventional semantics:
+
+| Method   | Purpose                                           |
+|----------|---------------------------------------------------|
+| `GET`    | Retrieve a resource or a list of resources        |
+| `POST`   | Create a new resource                             |
+| `PUT`    | Replace a resource entirely                       |
+| `PATCH`  | Apply a partial update to a resource              |
+| `DELETE` | Remove a resource                                 |
+
+### Resource ID Prefixes
+
+Every resource ID is a prefixed string that makes the type immediately identifiable at a glance:
+
+| Prefix   | Resource Type     |
+|----------|-------------------|
+| `pat_`   | Patient           |
+| `enc_`   | Encounter         |
+| `clm_`   | Claim             |
+| `elig_`  | Eligibility Check |
+| `evt_`   | Event             |
+| `appt_`  | Appointment       |
+
+### Timestamps
+
+All timestamps in request bodies and responses use **ISO 8601 format in UTC**, for example `2024-06-15T14:30:00Z`. When you submit a timestamp without an explicit offset, the API assumes UTC.
+
+## Response Format
+
+Every response body is JSON. Single-resource responses return the object directly under a `data` key. List responses wrap the array and include a `pagination` object:
+
+```json
+{
+  "data": [...],
+  "pagination": {
+    "page": 1,
+    "per_page": 25,
+    "total": 142,
+    "total_pages": 6
+  }
+}
+```
+
+Error responses always include a human-readable `message`, a machine-readable `error` code, the HTTP `status` code, and a unique `request_id` you can provide to support:
+
+```json
+{
+  "error": "resource_not_found",
+  "message": "No patient found with id pat_01HXE1F2G3H4.",
+  "status": 404,
+  "request_id": "req_01HXE1F2G3H4I5J6K7L8M9N0O"
+}
+```
+
+<Tip>
+  Log and store `request_id` values from error responses. When you contact CodeCrafting Hub support, providing the `request_id` lets the support team locate the exact request in internal traces immediately.
+</Tip>
+
+### Standard HTTP Status Codes
+
+| Status | Meaning                                                    |
+|--------|------------------------------------------------------------|
+| `200`  | Success — resource returned or updated                     |
+| `201`  | Created — new resource successfully created                |
+| `204`  | No Content — resource deleted, no body returned            |
+| `400`  | Bad Request — validation error or malformed JSON           |
+| `401`  | Unauthorized — missing or invalid API key                  |
+| `403`  | Forbidden — key lacks permission for the requested action  |
+| `404`  | Not Found — resource does not exist                        |
+| `422`  | Unprocessable Entity — business logic validation failed    |
+| `429`  | Too Many Requests — rate limit exceeded                    |
+| `500`  | Internal Server Error — something went wrong on our end    |
+
+## Versioning
+
+The API version is embedded in the URL path (`/v1/`). The current stable version is **v1**. CodeCrafting Hub introduces breaking changes — such as removing fields, changing data types, or altering endpoint behavior — only in a new major version (for example `/v2/`). Additive changes such as new optional fields, new endpoints, and new optional query parameters are made to the current version without a version bump.
+
+<Note>
+  You will receive advance notice via email and dashboard announcement at least **90 days** before a previous major version is retired. Plan your migrations accordingly.
+</Note>
+
+## Pagination & Rate Limits
+
+All list endpoints return paginated results. See the [Pagination](/api-reference/pagination) guide for details on page-based and cursor-based navigation. To understand request quotas and how to handle `429` responses gracefully, see the [Rate Limits](/api-reference/rate-limits) guide.
+
+## SDKs
+
+<Info>
+  Official **Python** and **Node.js** SDKs are coming soon. They will handle authentication, retries, and response parsing out of the box. In the meantime, any HTTP client — `curl`, `requests`, `axios`, or `fetch` — works directly with the REST API.
+</Info>

@@ -1,0 +1,217 @@
+---
+title: "Search Patient Records — GET /patients/search"
+sidebarTitle: "Search Patients"
+description: "Query your patient population using name, date of birth, MRN, external ID, or status filters, with built-in pagination for large result sets."
+---
+
+The Search Patients endpoint lets you query your patient population using one or more filter parameters passed as URL query strings. You can combine a free-text `q` parameter with structured filters — such as `date_of_birth` or `mrn` — to narrow results precisely, or use `q` alone for broad discovery. Results are paginated and sorted by relevance when `q` is present, or by `created_at` descending when only structured filters are used. This endpoint is available to any API key scoped to `read`, `read-write`, or `admin`.
+
+## Endpoint
+
+```
+GET https://api.codecraftinghub.com/v1/patients/search
+```
+
+<Note>
+  **Scope required:** `read`, `read-write`, or `admin`. Authenticate with
+  `Authorization: Bearer YOUR_API_KEY`. No request body is needed — all
+  parameters are passed as URL query parameters.
+</Note>
+
+---
+
+## Query Parameters
+
+<ParamField query="q" type="string">
+  Free-text search query. The platform searches across the patient's first
+  name, last name, email address, and phone number. Partial matches are
+  supported (e.g., `q=smi` will match `Smith`, `Smithson`, etc.).
+</ParamField>
+
+<ParamField query="first_name" type="string">
+  Filter by first name. Supports exact and partial matches (case-insensitive).
+  Use alongside `last_name` and `date_of_birth` for high-confidence matching
+  during patient registration deduplication workflows.
+</ParamField>
+
+<ParamField query="last_name" type="string">
+  Filter by last name. Supports exact and partial matches (case-insensitive).
+</ParamField>
+
+<ParamField query="date_of_birth" type="string">
+  Filter by date of birth. Must be provided in **ISO 8601** format
+  (`YYYY-MM-DD`). This is an exact match filter — partial date expressions
+  are not supported.
+</ParamField>
+
+<ParamField query="mrn" type="string">
+  Filter by Medical Record Number. This is an **exact match** filter; partial
+  MRN values will not return results.
+</ParamField>
+
+<ParamField query="external_id" type="string">
+  Filter by your system's patient identifier. This is an **exact match**
+  filter. Use this to check whether a patient from your source system already
+  exists in the platform before attempting to create a duplicate.
+</ParamField>
+
+<ParamField query="status" type="string">
+  Filter by patient record status. Accepted values: `active`, `inactive`,
+  `deceased`. Omit this parameter to return patients of all statuses.
+</ParamField>
+
+<ParamField query="page" type="integer" default="1">
+  The page number to return. Combine with `per_page` to paginate through large
+  result sets.
+</ParamField>
+
+<ParamField query="per_page" type="integer" default="25">
+  Number of results to return per page. Maximum value is `100`. Requesting
+  more than 100 results per page returns a `422` validation error.
+</ParamField>
+
+---
+
+## Example Requests
+
+<CodeGroup>
+
+```bash cURL
+# Search by last name and date of birth
+curl 'https://api.codecraftinghub.com/v1/patients/search?last_name=Smith&date_of_birth=1985-03-14' \
+  -H 'Authorization: Bearer YOUR_API_KEY'
+```
+
+```python Python
+import requests
+
+url = "https://api.codecraftinghub.com/v1/patients/search"
+headers = {
+    "Authorization": "Bearer YOUR_API_KEY",
+}
+params = {
+    "last_name": "Smith",
+    "date_of_birth": "1985-03-14",
+}
+
+response = requests.get(url, params=params, headers=headers)
+result = response.json()
+
+for patient in result["data"]:
+    print(f"{patient['id']} — {patient['first_name']} {patient['last_name']}")
+
+print(f"Total matches: {result['pagination']['total']}")
+```
+
+</CodeGroup>
+
+<Tip>
+  Combine `last_name`, `first_name`, and `date_of_birth` together to perform a
+  demographic match check before creating a new patient. If you get one
+  high-confidence result back, link to the existing record instead of creating
+  a duplicate.
+</Tip>
+
+---
+
+## Response
+
+### 200 OK
+
+A successful request returns `200 OK` with a `data` array of matching patient
+summary objects and a `pagination` envelope.
+
+```json
+{
+  "data": [
+    {
+      "id": "pat_01HX9Z2K3M4N5P6Q7R8S9T0U",
+      "first_name": "Jane",
+      "last_name": "Smith",
+      "date_of_birth": "1985-03-14",
+      "mrn": "MRN-00042",
+      "status": "active"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "per_page": 25,
+    "total": 1,
+    "total_pages": 1
+  }
+}
+```
+
+#### `data` Array — Patient Summary Object
+
+<ResponseField name="data" type="array">
+  An array of patient summary objects matching your query. Returns an empty
+  array (`[]`) when no patients match — the endpoint never returns `404` for
+  an empty result set.
+</ResponseField>
+
+<ResponseField name="data[].id" type="string">
+  Platform-assigned unique patient ID, prefixed with `pat_`. Use this to fetch
+  the full record via `GET /patients/{id}`.
+</ResponseField>
+
+<ResponseField name="data[].first_name" type="string">
+  Patient's legal first name.
+</ResponseField>
+
+<ResponseField name="data[].last_name" type="string">
+  Patient's legal last name.
+</ResponseField>
+
+<ResponseField name="data[].date_of_birth" type="string">
+  Patient's date of birth in `YYYY-MM-DD` format.
+</ResponseField>
+
+<ResponseField name="data[].mrn" type="string">
+  Patient's Medical Record Number.
+</ResponseField>
+
+<ResponseField name="data[].status" type="string">
+  Current record status: `active`, `inactive`, or `deceased`.
+</ResponseField>
+
+#### `pagination` Object
+
+<ResponseField name="pagination.page" type="integer">
+  The current page number returned.
+</ResponseField>
+
+<ResponseField name="pagination.per_page" type="integer">
+  The number of results included on this page.
+</ResponseField>
+
+<ResponseField name="pagination.total" type="integer">
+  Total number of patients matching your query across all pages.
+</ResponseField>
+
+<ResponseField name="pagination.total_pages" type="integer">
+  Total number of pages available at the current `per_page` setting.
+</ResponseField>
+
+---
+
+### Error Responses
+
+| Status | Error Code         | Description                                                                 |
+| ------ | ------------------ | --------------------------------------------------------------------------- |
+| `422`  | `validation_error` | An invalid parameter value was supplied (e.g., `per_page` exceeds `100`).  |
+| `403`  | `forbidden`        | Your API key does not carry sufficient scope to search patient records.     |
+| `401`  | `unauthorized`     | Missing or invalid `Authorization` header.                                  |
+
+<Note>
+  A query that matches zero patients returns `200 OK` with `"data": []` and
+  `"pagination": {"total": 0, ...}`. You will only receive a `404` when calling
+  a resource-specific endpoint like `GET /patients/{id}` with an unknown ID.
+</Note>
+
+<Warning>
+  Avoid submitting a search with no parameters — doing so returns all patients
+  in your organization paginated at `per_page`, which may trigger rate limiting
+  for large practices. Always supply at least one filter parameter for targeted
+  lookups.
+</Warning>

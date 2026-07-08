@@ -1,0 +1,154 @@
+---
+title: "POST /claims — Submit a Professional or Institutional Claim"
+sidebarTitle: "POST /claims"
+description: "Submit a professional (CMS-1500) or institutional (UB-04) claim to a target payer against a completed encounter record for adjudication."
+---
+
+Once an encounter reaches `completed` status and all diagnoses and procedures are documented, you submit a claim to the payer through this endpoint. The API derives line-item details directly from the linked encounter, so you only need to provide payer routing and provider billing information. Both professional (CMS-1500) and institutional (UB-04) claim types are supported. You need at minimum the `read-write` scope to call this endpoint.
+
+## Request
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token for API authentication. Format: `Bearer YOUR_API_KEY`.
+</ParamField>
+
+<ParamField body="encounter_id" type="string" required>
+  The platform identifier of the `completed` encounter to bill. Prefix: `enc_`.
+</ParamField>
+
+<ParamField body="claim_type" type="string" required>
+  The claim form type. Use `professional` for CMS-1500 (physician/outpatient services) or `institutional` for UB-04 (hospital/facility services).
+</ParamField>
+
+<ParamField body="payer_id" type="string" required>
+  The target payer identifier from your payer directory (e.g., `payer_bcbs_tx_001`).
+</ParamField>
+
+<ParamField body="rendering_provider_npi" type="string" required>
+  The 10-digit NPI of the provider who rendered the services.
+</ParamField>
+
+<ParamField body="billing_provider_npi" type="string" required>
+  The 10-digit NPI of the billing entity (group practice or facility).
+</ParamField>
+
+<ParamField body="billing_provider_tax_id" type="string" required>
+  The EIN or TIN of the billing entity, formatted as `XX-XXXXXXX`.
+</ParamField>
+
+<ParamField body="service_facility_location_npi" type="string">
+  NPI of the facility where services were rendered, if different from the billing provider.
+</ParamField>
+
+<ParamField body="prior_authorization_number" type="string">
+  Prior authorization number from the payer, if one was obtained before the service.
+</ParamField>
+
+<ParamField body="coordination_of_benefits" type="object">
+  Secondary insurance details for coordination of benefits (COB) billing.
+
+  <Expandable title="coordination_of_benefits fields">
+    <ParamField body="payer_id" type="string" required>
+      Identifier of the secondary payer.
+    </ParamField>
+    <ParamField body="member_id" type="string" required>
+      Patient's member ID with the secondary payer.
+    </ParamField>
+    <ParamField body="group_number" type="string">
+      Group policy number for the secondary payer.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://api.codecraftinghub.com/v1/claims \
+  -H 'Authorization: Bearer YOUR_API_KEY' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "encounter_id": "enc_01HXA1B2C3D4E5F6G7H8I9J0K",
+    "claim_type": "professional",
+    "payer_id": "payer_bcbs_tx_001",
+    "rendering_provider_npi": "1234567890",
+    "billing_provider_npi": "9876543210",
+    "billing_provider_tax_id": "12-3456789"
+  }'
+```
+
+```python Python
+import httpx
+
+payload = {
+    "encounter_id": "enc_01HXA1B2C3D4E5F6G7H8I9J0K",
+    "claim_type": "professional",
+    "payer_id": "payer_bcbs_tx_001",
+    "rendering_provider_npi": "1234567890",
+    "billing_provider_npi": "9876543210",
+    "billing_provider_tax_id": "12-3456789",
+}
+
+response = httpx.post(
+    "https://api.codecraftinghub.com/v1/claims",
+    headers={"Authorization": "Bearer YOUR_API_KEY"},
+    json=payload,
+)
+claim = response.json()
+print(claim["id"])
+```
+</CodeGroup>
+
+<Warning>
+  You can only submit a claim against an encounter in `completed` status. Attempting to bill an `in_progress` or `draft` encounter returns `422 Unprocessable Entity`. Additionally, submitting a duplicate claim against the same encounter and payer within 24 hours returns a `409 Conflict` to prevent accidental double-billing.
+</Warning>
+
+<Note>
+  If a prior authorization number is required by the payer for the submitted service type and you omit `prior_authorization_number`, the claim will be accepted by the API but may be denied downstream by the payer. Always verify authorization requirements before submission.
+</Note>
+
+## Response
+
+A successful request returns HTTP **201 Created** with the new claim object.
+
+<ResponseField name="id" type="string">
+  Platform-generated claim identifier. Prefix: `clm_`.
+</ResponseField>
+
+<ResponseField name="encounter_id" type="string">
+  The encounter this claim was generated from.
+</ResponseField>
+
+<ResponseField name="claim_type" type="string">
+  The claim form type: `professional` or `institutional`.
+</ResponseField>
+
+<ResponseField name="payer_id" type="string">
+  The payer this claim was submitted to.
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Initial claim status. Always `submitted` on creation.
+</ResponseField>
+
+<ResponseField name="total_charge" type="number">
+  Total billed charge in USD, derived from procedure charges on the encounter.
+</ResponseField>
+
+<ResponseField name="submitted_at" type="string">
+  ISO 8601 timestamp of claim submission.
+</ResponseField>
+
+```json 201 Created
+{
+  "id": "clm_01HXB1C2D3E4F5G6H7I8J9K0L",
+  "encounter_id": "enc_01HXA1B2C3D4E5F6G7H8I9J0K",
+  "claim_type": "professional",
+  "payer_id": "payer_bcbs_tx_001",
+  "status": "submitted",
+  "total_charge": 150.00,
+  "submitted_at": "2024-01-15T16:00:00Z"
+}
+```
+
+<Tip>
+  Poll [GET /claims/{id}](/api-reference/claims/status) or set up a webhook to track status transitions from `submitted` through `accepted`, `paid`, or `denied` without repeatedly querying the API.
+</Tip>

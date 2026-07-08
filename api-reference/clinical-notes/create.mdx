@@ -1,0 +1,150 @@
+---
+title: "POST /encounters/{id}/notes — Add a Clinical Note Type"
+sidebarTitle: "POST /notes"
+description: "Attach a structured SOAP note, progress note, or free-text clinical narrative to an existing encounter for documentation and compliance purposes."
+---
+
+Clinical documentation lives alongside the encounter it describes. You attach notes—SOAP-formatted or free-text—to an existing encounter using this endpoint so that the complete clinical picture is preserved in one place for auditing, continuity of care, and medical record requests. You need at minimum the `read-write` scope to call this endpoint.
+
+## Request
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token for API authentication. Format: `Bearer YOUR_API_KEY`.
+</ParamField>
+
+<ParamField path="id" type="string" required>
+  The platform identifier of the encounter to attach the note to. Prefix: `enc_`.
+</ParamField>
+
+<ParamField body="note_type" type="string" required>
+  The format of the clinical note. Accepted values: `soap`, `free_text`, `progress`, `discharge_summary`.
+</ParamField>
+
+<ParamField body="subjective" type="string">
+  The patient's reported symptoms and history in their own words. **Required** when `note_type` is `soap`.
+</ParamField>
+
+<ParamField body="objective" type="string">
+  Measurable clinical findings such as vitals, exam findings, and test results. **Required** when `note_type` is `soap`.
+</ParamField>
+
+<ParamField body="assessment" type="string">
+  The provider's clinical interpretation and working diagnosis. **Required** when `note_type` is `soap`.
+</ParamField>
+
+<ParamField body="plan" type="string">
+  The treatment, follow-up, and management plan. **Required** when `note_type` is `soap`.
+</ParamField>
+
+<ParamField body="content" type="string">
+  Unstructured narrative content for the note. **Required** when `note_type` is `free_text`, `progress`, or `discharge_summary`.
+</ParamField>
+
+<ParamField body="authored_by_npi" type="string">
+  The NPI of the provider authoring the note, if different from the encounter's rendering provider.
+</ParamField>
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://api.codecraftinghub.com/v1/encounters/enc_01HXA1B2C3D4E5F6G7H8I9J0K/notes \
+  -H 'Authorization: Bearer YOUR_API_KEY' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "note_type": "soap",
+    "subjective": "Patient presents with sore throat and mild fever for 3 days.",
+    "objective": "Temp: 101.2°F. Pharynx erythematous. Strep test negative.",
+    "assessment": "Acute pharyngitis, viral.",
+    "plan": "Supportive care, follow up in 5 days.",
+    "authored_by_npi": "1234567890"
+  }'
+```
+
+```python Python
+import httpx
+
+encounter_id = "enc_01HXA1B2C3D4E5F6G7H8I9J0K"
+
+payload = {
+    "note_type": "soap",
+    "subjective": "Patient presents with sore throat and mild fever for 3 days.",
+    "objective": "Temp: 101.2°F. Pharynx erythematous. Strep test negative.",
+    "assessment": "Acute pharyngitis, viral.",
+    "plan": "Supportive care, follow up in 5 days.",
+    "authored_by_npi": "1234567890",
+}
+
+response = httpx.post(
+    f"https://api.codecraftinghub.com/v1/encounters/{encounter_id}/notes",
+    headers={"Authorization": "Bearer YOUR_API_KEY"},
+    json=payload,
+)
+note = response.json()
+print(note["id"])
+```
+</CodeGroup>
+
+<Note>
+  You can attach multiple notes to a single encounter. For example, an admitting note and a discharge summary on an inpatient encounter are stored as separate note records under the same `encounter_id`.
+</Note>
+
+<Warning>
+  Notes attached to encounters in `billed` status are stored as read-only addendums. You cannot modify or delete notes once an encounter has been billed, in compliance with medical record integrity requirements.
+</Warning>
+
+## Response
+
+A successful request returns HTTP **201 Created** with the newly created note object.
+
+<ResponseField name="id" type="string">
+  Platform-generated note identifier. Prefix: `note_`.
+</ResponseField>
+
+<ResponseField name="encounter_id" type="string">
+  The encounter this note is attached to.
+</ResponseField>
+
+<ResponseField name="note_type" type="string">
+  The note format as submitted (e.g., `soap`).
+</ResponseField>
+
+<ResponseField name="subjective" type="string">
+  Subjective section of the SOAP note, if applicable.
+</ResponseField>
+
+<ResponseField name="objective" type="string">
+  Objective section of the SOAP note, if applicable.
+</ResponseField>
+
+<ResponseField name="assessment" type="string">
+  Assessment section of the SOAP note, if applicable.
+</ResponseField>
+
+<ResponseField name="plan" type="string">
+  Plan section of the SOAP note, if applicable.
+</ResponseField>
+
+<ResponseField name="authored_by_npi" type="string">
+  NPI of the authoring provider.
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 timestamp of when the note was created.
+</ResponseField>
+
+```json 201 Created
+{
+  "id": "note_01HXF1G2H3I4J5K6L7M8N9O0P",
+  "encounter_id": "enc_01HXA1B2C3D4E5F6G7H8I9J0K",
+  "note_type": "soap",
+  "subjective": "Patient presents with sore throat and mild fever for 3 days.",
+  "objective": "Temp: 101.2°F. Pharynx erythematous. Strep test negative.",
+  "assessment": "Acute pharyngitis, viral.",
+  "plan": "Supportive care, follow up in 5 days.",
+  "authored_by_npi": "1234567890",
+  "created_at": "2024-01-15T14:45:00Z"
+}
+```
+
+<Tip>
+  Retrieve all notes for an encounter at any time by calling [GET /encounters/{id}](/api-reference/encounters/get) with `include=notes`.
+</Tip>

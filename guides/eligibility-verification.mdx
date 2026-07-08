@@ -1,0 +1,342 @@
+---
+title: "Verifying Patient Insurance Eligibility in Real Time"
+sidebarTitle: "Eligibility Check"
+description: "Check patient insurance eligibility before every appointment, parse benefits responses, and handle inactive coverage using the CodeCrafting Hub API."
+---
+
+Eligibility verification is the single highest-leverage step in your revenue cycle. Confirming active coverage—and surfacing deductible, copay, and out-of-pocket details—before the patient walks in prevents claim denials, eliminates surprise billing disputes, and lets front-desk staff collect the right patient responsibility amount at time of service.
+
+<Info>
+  CodeCrafting Hub connects to payers in real time via X12 270/271 EDI transactions. Most payers return a response in under three seconds. Responses are cached for six hours per patient–payer–service-date combination to minimize redundant transactions.
+</Info>
+
+## When to Check Eligibility
+
+Run an eligibility check at these points in the patient workflow:
+
+- **At scheduling** — Confirm the patient is covered under the plan they provided.
+- **24–48 hours before the appointment** — Coverage can change between scheduling and the visit date.
+- **Day of service** — The definitive check that drives copay collection and claim submission.
+
+<Tip>
+  Use the **batch eligibility** endpoint (`POST /eligibility/batch`) to run overnight checks for all patients scheduled the following day in a single API call. See [Real-Time vs. Batch Eligibility](#real-time-vs-batch-eligibility) below.
+</Tip>
+
+---
+
+## Prerequisites
+
+Before checking eligibility, make sure you have:
+
+- A valid API key with the `eligibility:read` scope
+- The patient `id` returned by `POST /patients` (see [Patient Registration](/guides/patient-registration))
+- The `payer_id` of the patient's insurance plan (find it in the [Eligibility API reference](/api-reference/eligibility/check))
+- The rendering provider's NPI
+- The intended service date
+
+---
+
+## Step 1 — Gather Required Fields
+
+Every eligibility request requires the following four fields.
+
+| Field | Type | Description |
+|---|---|---|
+| `patient_id` | string | CodeCrafting Hub patient identifier |
+| `payer_id` | string | CodeCrafting Hub payer identifier from the Payer Directory |
+| `service_date` | string | Intended date of service in `YYYY-MM-DD` format |
+| `provider_npi` | string | 10-digit NPI of the rendering provider |
+| `service_type_code` | string | X12 service type code — `30` for most outpatient visits |
+
+<Note>
+  The `service_type_code` controls which benefit categories the payer returns. Code `30` returns all outpatient health benefits. Use `98` for professional visits, `48` for hospital outpatient, or `AL` for vision. Consult the X12 service type code list for the full list.
+</Note>
+
+---
+
+## Step 2 — POST /eligibility/check
+
+Submit the eligibility request with the fields gathered above.
+
+<CodeGroup>
+
+```bash curl
+curl --request POST \
+  --url https://api.codecraftinghub.com/v1/eligibility/check \
+  --header "Authorization: Bearer YOUR_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "patient_id": "pat_01HX9Z2K3M4N5P6Q7R8S9T0U",
+    "payer_id": "payer_bcbs_tx_001",
+    "service_date": "2024-01-15",
+    "provider_npi": "1234567890",
+    "service_type_code": "30"
+  }'
+```
+
+```python Python
+import requests
+
+url = "https://api.codecraftinghub.com/v1/eligibility/check"
+headers = {
+    "Authorization": "Bearer YOUR_API_KEY",
+    "Content-Type": "application/json",
+}
+payload = {
+    "patient_id": "pat_01HX9Z2K3M4N5P6Q7R8S9T0U",
+    "payer_id": "payer_bcbs_tx_001",
+    "service_date": "2024-01-15",
+    "provider_npi": "1234567890",
+    "service_type_code": "30",
+}
+
+response = requests.post(url, json=payload, headers=headers)
+response.raise_for_status()
+
+eligibility = response.json()
+print(f"Coverage active: {eligibility['coverage_active']}")
+print(f"Plan: {eligibility['plan_name']}")
+```
+
+</CodeGroup>
+
+---
+
+## Step 3 — Parse the Eligibility Response
+
+A successful response returns `200 OK` with a structured benefits object. Use the fields below to inform copay collection and patient financial counseling.
+
+**Full eligibility response:**
+
+```json
+{
+  "id": "elig_01HXC1D2E3F4G5H6I7J8K9L0M",
+  "patient_id": "pat_01HX9Z2K3M4N5P6Q7R8S9T0U",
+  "payer_id": "payer_bcbs_tx_001",
+  "coverage_active": true,
+  "member_id": "BCB123456789",
+  "group_number": "GRP-001",
+  "plan_name": "Blue Cross PPO Gold",
+  "deductible": {
+    "individual": 1500.00,
+    "met": 450.00,
+    "remaining": 1050.00
+  },
+  "copay": {
+    "primary_care": 30.00,
+    "specialist": 50.00
+  },
+  "out_of_pocket_max": {
+    "individual": 5000.00,
+    "met": 450.00,
+    "remaining": 4550.00
+  },
+  "checked_at": "2024-01-15T08:00:00Z"
+}
+```
+
+### Key fields explained
+
+| Field | How to use it |
+|---|---|
+| `coverage_active` | Gate every downstream workflow on this boolean. If `false`, stop and collect updated insurance or self-pay. |
+| `deductible.remaining` | If > $0, the patient owes this amount (up to the allowed charge) before insurance applies. Collect at time of service. |
+| `copay.primary_care` | Fixed patient responsibility for a PCP visit. Display to front-desk staff for collection. |
+| `copay.specialist` | Fixed patient responsibility for a specialist visit. Use when the rendering provider is a specialist. |
+| `out_of_pocket_max.remaining` | Once met, the payer covers 100% of allowed charges for the rest of the plan year. |
+| `checked_at` | Timestamp of the payer response. Show this to staff so they know how fresh the data is. |
+
+<CodeGroup>
+
+```python Python — Parse response
+import requests
+
+url = "https://api.codecraftinghub.com/v1/eligibility/check"
+headers = {
+    "Authorization": "Bearer YOUR_API_KEY",
+    "Content-Type": "application/json",
+}
+payload = {
+    "patient_id": "pat_01HX9Z2K3M4N5P6Q7R8S9T0U",
+    "payer_id": "payer_bcbs_tx_001",
+    "service_date": "2024-01-15",
+    "provider_npi": "1234567890",
+    "service_type_code": "30",
+}
+
+response = requests.post(url, json=payload, headers=headers)
+response.raise_for_status()
+e = response.json()
+
+if not e["coverage_active"]:
+    print("⚠️  Coverage is inactive. Collect updated insurance or self-pay.")
+else:
+    deductible_remaining = e["deductible"]["remaining"]
+    copay               = e["copay"].get("primary_care", 0)
+    oop_remaining       = e["out_of_pocket_max"]["remaining"]
+
+    patient_responsibility = copay if deductible_remaining == 0 else min(deductible_remaining, 150.00)
+    print(f"Plan: {e['plan_name']}")
+    print(f"Deductible remaining: ${deductible_remaining:.2f}")
+    print(f"Copay (primary care): ${copay:.2f}")
+    print(f"OOP max remaining:    ${oop_remaining:.2f}")
+    print(f"Estimated patient responsibility today: ${patient_responsibility:.2f}")
+```
+
+</CodeGroup>
+
+---
+
+## Step 4 — Handle Inactive Coverage
+
+When `coverage_active` is `false`, follow this workflow before proceeding with the appointment.
+
+<Steps>
+  <Step title="Notify the patient">
+    Inform the patient that their coverage on file is inactive and ask them to provide an updated insurance card.
+  </Step>
+  <Step title="Update the insurance policy">
+    Call `PUT /patients/{id}/insurance/{policy_id}` with the corrected payer ID, member ID, or effective date, or add a new policy with `POST /patients/{id}/insurance`.
+  </Step>
+  <Step title="Re-run eligibility">
+    Submit a new `POST /eligibility/check` request with the updated policy details to confirm the correction resolved the issue.
+  </Step>
+  <Step title="Offer self-pay if unresolved">
+    If coverage cannot be confirmed, offer the patient a self-pay rate and document the financial arrangement before the appointment proceeds.
+  </Step>
+</Steps>
+
+<Warning>
+  Do not submit a claim for a visit where eligibility returned `coverage_active: false` without first confirming updated active coverage. The claim will be denied with code **CO-16** (missing or invalid subscriber information).
+</Warning>
+
+---
+
+## Step 5 — Real-Time vs. Batch Eligibility
+
+<Tabs>
+  <Tab title="Real-Time (Single Patient)">
+    Use `POST /eligibility/check` for on-demand checks triggered by scheduling events, patient arrivals, or manual staff requests. The response is synchronous and returns in under five seconds for most payers.
+
+    **Best for:** Individual patient check-in, same-day scheduling, urgent care walk-ins.
+
+    ```bash curl
+    curl --request POST \
+      --url https://api.codecraftinghub.com/v1/eligibility/check \
+      --header "Authorization: Bearer YOUR_API_KEY" \
+      --header "Content-Type: application/json" \
+      --data '{
+        "patient_id": "pat_01HX9Z2K3M4N5P6Q7R8S9T0U",
+        "payer_id": "payer_bcbs_tx_001",
+        "service_date": "2024-01-15",
+        "provider_npi": "1234567890",
+        "service_type_code": "30"
+      }'
+    ```
+  </Tab>
+  <Tab title="Batch (Multiple Patients)">
+    Use `POST /eligibility/batch` to check eligibility for a list of patients in a single call. The endpoint accepts up to 500 patients per request and processes them asynchronously. Poll `GET /eligibility/batch/{batch_id}` for results.
+
+    **Best for:** Overnight pre-verification of the next day's schedule, large-volume practices.
+
+    ```bash curl
+    curl --request POST \
+      --url https://api.codecraftinghub.com/v1/eligibility/batch \
+      --header "Authorization: Bearer YOUR_API_KEY" \
+      --header "Content-Type: application/json" \
+      --data '{
+        "service_date": "2024-01-16",
+        "provider_npi": "1234567890",
+        "checks": [
+          {"patient_id": "pat_01HX9Z2K3M4N5P6Q7R8S9T0U", "payer_id": "payer_bcbs_tx_001"},
+          {"patient_id": "pat_02HX9Z2K3M4N5P6Q7R8S9T0V", "payer_id": "payer_aetna_001"},
+          {"patient_id": "pat_03HX9Z2K3M4N5P6Q7R8S9T0W", "payer_id": "payer_uhc_001"}
+        ]
+      }'
+    ```
+
+    ```python Python
+    import requests, time
+
+    headers = {
+        "Authorization": "Bearer YOUR_API_KEY",
+        "Content-Type": "application/json",
+    }
+
+    # Submit batch
+    batch_response = requests.post(
+        "https://api.codecraftinghub.com/v1/eligibility/batch",
+        json={
+            "service_date": "2024-01-16",
+            "provider_npi": "1234567890",
+            "checks": [
+                {"patient_id": "pat_01HX9Z2K3M4N5P6Q7R8S9T0U", "payer_id": "payer_bcbs_tx_001"},
+                {"patient_id": "pat_02HX9Z2K3M4N5P6Q7R8S9T0V", "payer_id": "payer_aetna_001"},
+            ],
+        },
+        headers=headers,
+    )
+    batch_response.raise_for_status()
+    batch_id = batch_response.json()["batch_id"]
+
+    # Poll for results
+    while True:
+        result = requests.get(
+            f"https://api.codecraftinghub.com/v1/eligibility/batch/{batch_id}",
+            headers={"Authorization": "Bearer YOUR_API_KEY"},
+        )
+        result.raise_for_status()
+        data = result.json()
+        if data["status"] == "completed":
+            for check in data["results"]:
+                print(f"{check['patient_id']}: active={check['coverage_active']}")
+            break
+        time.sleep(30)
+    ```
+
+    <Note>
+      Batch results are available for 72 hours. Download and store them in your system before that window expires.
+    </Note>
+  </Tab>
+</Tabs>
+
+---
+
+## Complete Eligibility Verification Flow
+
+<Steps>
+  <Step title="Gather required fields">
+    Collect `patient_id`, `payer_id`, `service_date`, `provider_npi`, and `service_type_code` before making the API call.
+  </Step>
+  <Step title="POST /eligibility/check">
+    Submit the eligibility request. For bulk pre-verification, use `POST /eligibility/batch` the night before.
+  </Step>
+  <Step title="Check coverage_active">
+    If `true`, extract deductible and copay data for front-desk collection. If `false`, update the patient's insurance and recheck.
+  </Step>
+  <Step title="Surface benefits to staff">
+    Display `deductible.remaining`, `copay`, and `out_of_pocket_max.remaining` in your scheduling or check-in UI so staff can collect the correct patient responsibility.
+  </Step>
+  <Step title="Store the eligibility ID">
+    Persist the `id` field (e.g., `elig_01HXC1D2E3F4G5H6I7J8K9L0M`) on the appointment record. You can reference it in claims and audits.
+  </Step>
+</Steps>
+
+---
+
+## What's Next
+
+<CardGroup cols={2}>
+  <Card title="Patient Registration" icon="user-plus" href="/guides/patient-registration">
+    Register a new patient and attach their insurance policy before running eligibility.
+  </Card>
+  <Card title="Claims Submission" icon="file-invoice-dollar" href="/guides/claims-submission">
+    Submit a claim after confirming eligibility and completing the encounter.
+  </Card>
+  <Card title="Clinical Notes" icon="notes-medical" href="/guides/clinical-notes">
+    Document SOAP notes and attach diagnoses and procedures to an encounter.
+  </Card>
+  <Card title="Payer Directory" icon="building-columns" href="/api-reference/eligibility/check">
+    Find payer IDs and check real-time eligibility support for each payer.
+  </Card>
+</CardGroup>

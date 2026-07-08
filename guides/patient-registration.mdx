@@ -1,0 +1,303 @@
+---
+title: "Registering a New Patient in CodeCrafting Hub"
+sidebarTitle: "Patient Registration"
+description: "Learn how to register a new patient, attach insurance coverage, and verify eligibility using the CodeCrafting Hub REST API."
+---
+
+Registering a patient is the first step in any clinical or billing workflow on CodeCrafting Hub. The process collects core demographics, assigns a unique patient ID and medical record number (MRN), links an insurance policy, and confirms active coverage—all through three straightforward API calls.
+
+<Info>
+  All patient data is stored in a HIPAA-compliant, FHIR R4-conformant data model. CodeCrafting Hub never stores raw payment card data, and all API traffic is encrypted in transit over TLS 1.2+.
+</Info>
+
+## Prerequisites
+
+Before you begin, make sure you have:
+
+- A valid API key with the `patients:write` and `eligibility:read` scopes
+- The patient's full legal name, date of birth, and gender
+- The patient's insurance card (payer ID, member ID, and group number)
+
+---
+
+## Step 1 — Gather Required Demographics
+
+Collect the following fields before making any API call. All fields marked **required** will cause a `422 Unprocessable Entity` response if omitted.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `first_name` | string | ✅ | Legal first name |
+| `last_name` | string | ✅ | Legal last name |
+| `date_of_birth` | string | ✅ | ISO 8601 format: `YYYY-MM-DD` |
+| `gender` | string | ✅ | `female`, `male`, `other`, `unknown` |
+| `email` | string | — | Used for patient portal invitations |
+| `phone` | string | — | E.164 or local US format |
+| `address` | object | — | Required for claim submission later |
+| `external_id` | string | — | Your internal EHR identifier for deduplication |
+
+<Tip>
+  Supply `external_id` with your own system's patient key. CodeCrafting Hub uses it to prevent duplicate registrations and makes it available as a filter on `GET /patients`.
+</Tip>
+
+---
+
+## Step 2 — Create the Patient Record
+
+Send a `POST /patients` request with the demographics you gathered. On success, the API returns a `201 Created` response containing the CodeCrafting Hub `id` and the system-assigned `mrn`.
+
+<CodeGroup>
+
+```bash curl
+curl --request POST \
+  --url https://api.codecraftinghub.com/v1/patients \
+  --header "Authorization: Bearer YOUR_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "first_name": "Jane",
+    "last_name": "Smith",
+    "date_of_birth": "1985-03-14",
+    "gender": "female",
+    "email": "jane.smith@email.com",
+    "phone": "555-867-5309",
+    "address": {
+      "line1": "123 Main St",
+      "city": "Austin",
+      "state": "TX",
+      "zip": "78701"
+    },
+    "external_id": "EHR-PAT-9871"
+  }'
+```
+
+```python Python
+import requests
+
+url = "https://api.codecraftinghub.com/v1/patients"
+headers = {
+    "Authorization": "Bearer YOUR_API_KEY",
+    "Content-Type": "application/json",
+}
+payload = {
+    "first_name": "Jane",
+    "last_name": "Smith",
+    "date_of_birth": "1985-03-14",
+    "gender": "female",
+    "email": "jane.smith@email.com",
+    "phone": "555-867-5309",
+    "address": {
+        "line1": "123 Main St",
+        "city": "Austin",
+        "state": "TX",
+        "zip": "78701",
+    },
+    "external_id": "EHR-PAT-9871",
+}
+
+response = requests.post(url, json=payload, headers=headers)
+response.raise_for_status()
+
+patient = response.json()
+patient_id = patient["id"]   # e.g. "pat_01HX9Z2K3M4N5P6Q7R8S9T0U"
+mrn        = patient["mrn"]  # e.g. "MRN-000042"
+print(f"Created patient {patient_id} with MRN {mrn}")
+```
+
+</CodeGroup>
+
+**Example response:**
+
+```json
+{
+  "id": "pat_01HX9Z2K3M4N5P6Q7R8S9T0U",
+  "mrn": "MRN-000042",
+  "first_name": "Jane",
+  "last_name": "Smith",
+  "date_of_birth": "1985-03-14",
+  "gender": "female",
+  "email": "jane.smith@email.com",
+  "phone": "555-867-5309",
+  "address": {
+    "line1": "123 Main St",
+    "city": "Austin",
+    "state": "TX",
+    "zip": "78701"
+  },
+  "external_id": "EHR-PAT-9871",
+  "created_at": "2024-01-15T09:00:00Z"
+}
+```
+
+---
+
+## Step 3 — Store the Patient `id` and `mrn`
+
+Persist both values in your system immediately after creation.
+
+- **`id`** — Use this in every subsequent API call that references this patient (insurance, eligibility, encounters, claims).
+- **`mrn`** — Display this in your UI as the human-readable chart identifier. It is unique within your organization's account.
+
+<Warning>
+  The `id` field is immutable and cannot be reassigned. If you lose it, you can recover it by calling `GET /patients?external_id=EHR-PAT-9871` using your own `external_id`—another reason to always supply one at registration.
+</Warning>
+
+---
+
+## Step 4 — Add an Insurance Policy
+
+Attach a primary insurance policy by posting to `/patients/{id}/insurance`. Replace `{id}` with the `id` value returned in Step 2.
+
+<CodeGroup>
+
+```bash curl
+curl --request POST \
+  --url https://api.codecraftinghub.com/v1/patients/pat_01HX9Z2K3M4N5P6Q7R8S9T0U/insurance \
+  --header "Authorization: Bearer YOUR_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "payer_id": "payer_bcbs_tx_001",
+    "member_id": "BCB123456789",
+    "group_number": "GRP-001",
+    "relationship_to_subscriber": "self",
+    "effective_date": "2024-01-01"
+  }'
+```
+
+```python Python
+import requests
+
+patient_id = "pat_01HX9Z2K3M4N5P6Q7R8S9T0U"
+url = f"https://api.codecraftinghub.com/v1/patients/{patient_id}/insurance"
+headers = {
+    "Authorization": "Bearer YOUR_API_KEY",
+    "Content-Type": "application/json",
+}
+payload = {
+    "payer_id": "payer_bcbs_tx_001",
+    "member_id": "BCB123456789",
+    "group_number": "GRP-001",
+    "relationship_to_subscriber": "self",
+    "effective_date": "2024-01-01",
+}
+
+response = requests.post(url, json=payload, headers=headers)
+response.raise_for_status()
+
+policy = response.json()
+print(f"Attached policy {policy['id']} — payer: {policy['payer_id']}")
+```
+
+</CodeGroup>
+
+**Example response:**
+
+```json
+{
+  "id": "ins_01HXA0B1C2D3E4F5G6H7I8J9K",
+  "patient_id": "pat_01HX9Z2K3M4N5P6Q7R8S9T0U",
+  "payer_id": "payer_bcbs_tx_001",
+  "member_id": "BCB123456789",
+  "group_number": "GRP-001",
+  "relationship_to_subscriber": "self",
+  "effective_date": "2024-01-01",
+  "priority": "primary",
+  "created_at": "2024-01-15T09:01:00Z"
+}
+```
+
+<Note>
+  To add a secondary or tertiary policy, repeat this call. CodeCrafting Hub automatically assigns `priority` based on insertion order (`primary` → `secondary` → `tertiary`). You can override priority by passing `"priority": "secondary"` explicitly.
+</Note>
+
+---
+
+## Step 5 — Verify Eligibility
+
+Before the patient's first appointment, confirm that their coverage is active by posting to `/eligibility/check`.
+
+<CodeGroup>
+
+```bash curl
+curl --request POST \
+  --url https://api.codecraftinghub.com/v1/eligibility/check \
+  --header "Authorization: Bearer YOUR_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "patient_id": "pat_01HX9Z2K3M4N5P6Q7R8S9T0U",
+    "payer_id": "payer_bcbs_tx_001",
+    "service_date": "2024-01-15",
+    "provider_npi": "1234567890",
+    "service_type_code": "30"
+  }'
+```
+
+```python Python
+import requests
+
+url = "https://api.codecraftinghub.com/v1/eligibility/check"
+headers = {
+    "Authorization": "Bearer YOUR_API_KEY",
+    "Content-Type": "application/json",
+}
+payload = {
+    "patient_id": "pat_01HX9Z2K3M4N5P6Q7R8S9T0U",
+    "payer_id": "payer_bcbs_tx_001",
+    "service_date": "2024-01-15",
+    "provider_npi": "1234567890",
+    "service_type_code": "30",
+}
+
+response = requests.post(url, json=payload, headers=headers)
+response.raise_for_status()
+
+eligibility = response.json()
+if eligibility["coverage_active"]:
+    print("Coverage is active — proceed with scheduling.")
+else:
+    print("Coverage inactive — collect self-pay or update insurance.")
+```
+
+</CodeGroup>
+
+Check the `coverage_active` field in the response. If it is `false`, collect updated insurance information from the patient before proceeding.
+
+<Tip>
+  For a full breakdown of the eligibility response—including deductibles, copays, and out-of-pocket maximums—see the [Eligibility Verification guide](/guides/eligibility-verification).
+</Tip>
+
+---
+
+## Complete Registration Flow
+
+<Steps>
+  <Step title="Gather demographics">
+    Collect `first_name`, `last_name`, `date_of_birth`, `gender`, and optionally address and contact information from the patient or their intake form.
+  </Step>
+  <Step title="POST /patients">
+    Submit the demographics payload and receive back the unique `id` and `mrn`. Store both values in your system.
+  </Step>
+  <Step title="POST /patients/{id}/insurance">
+    Attach the primary insurance policy using the payer ID, member ID, and group number from the patient's insurance card.
+  </Step>
+  <Step title="POST /eligibility/check">
+    Confirm that coverage is active for the intended service date. Surface benefit details (copay, deductible) to front-desk staff before the appointment.
+  </Step>
+</Steps>
+
+---
+
+## What's Next
+
+<CardGroup cols={2}>
+  <Card title="Eligibility Verification" icon="shield-check" href="/guides/eligibility-verification">
+    Deep-dive into parsing eligibility responses and handling inactive coverage.
+  </Card>
+  <Card title="Clinical Notes" icon="notes-medical" href="/guides/clinical-notes">
+    Document SOAP notes, attach ICD-10 diagnoses, and complete an encounter.
+  </Card>
+  <Card title="Claims Submission" icon="file-invoice-dollar" href="/guides/claims-submission">
+    Submit professional claims and track their status through adjudication.
+  </Card>
+  <Card title="Payer Directory" icon="building-columns" href="/api-reference/eligibility/check">
+    Browse all supported payer IDs and their real-time eligibility capabilities.
+  </Card>
+</CardGroup>

@@ -1,0 +1,153 @@
+---
+title: "POST /payments — Post an ERA or Manual Payment to a Claim"
+sidebarTitle: "POST /payments"
+description: "Post an electronic remittance advice (ERA), manual check, or patient payment against a submitted claim to reconcile its outstanding balance."
+---
+
+When a payer remits payment or a patient makes a payment, you post that transaction against the associated claim using this endpoint. Posting a payment records the paid amount, captures contractual adjustment reason codes, and automatically reconciles the claim's outstanding balance so your accounts receivable stays accurate. You need at minimum the `read-write` scope to call this endpoint.
+
+## Request
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token for API authentication. Format: `Bearer YOUR_API_KEY`.
+</ParamField>
+
+<ParamField body="claim_id" type="string" required>
+  The platform identifier of the claim this payment applies to. Prefix: `clm_`.
+</ParamField>
+
+<ParamField body="payment_type" type="string" required>
+  The source and method of payment. Accepted values: `era` (electronic remittance), `manual_check`, `patient_payment`.
+</ParamField>
+
+<ParamField body="paid_amount" type="number" required>
+  The payment amount in USD (e.g., `105.00`).
+</ParamField>
+
+<ParamField body="payment_date" type="string" required>
+  The date the payment was received or the ERA was issued, in `YYYY-MM-DD` format.
+</ParamField>
+
+<ParamField body="check_number" type="string">
+  The paper check number or EFT trace number for reconciliation. Recommended for audit purposes.
+</ParamField>
+
+<ParamField body="era_id" type="string">
+  The ERA file identifier if `payment_type` is `era`. Links this payment to the full remittance file for line-level reconciliation.
+</ParamField>
+
+<ParamField body="adjustment_reason_codes" type="array">
+  An array of X12 Claim Adjustment Reason Codes (CARCs) representing contractual write-offs and other adjustments applied by the payer.
+
+  <Expandable title="adjustment_reason_codes object fields">
+    <ParamField body="code" type="string" required>
+      The CARC code (e.g., `CO-45` for contractual obligation exceeding fee schedule).
+    </ParamField>
+    <ParamField body="amount" type="number" required>
+      The dollar amount adjusted for this reason code.
+    </ParamField>
+    <ParamField body="description" type="string">
+      Human-readable explanation of the adjustment.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://api.codecraftinghub.com/v1/payments \
+  -H 'Authorization: Bearer YOUR_API_KEY' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "claim_id": "clm_01HXB1C2D3E4F5G6H7I8J9K0L",
+    "payment_type": "era",
+    "paid_amount": 105.00,
+    "payment_date": "2024-01-29",
+    "check_number": "EFT-2024-0129-001",
+    "adjustment_reason_codes": [
+      {
+        "code": "CO-45",
+        "amount": 15.00,
+        "description": "Contractual obligation: exceeds fee schedule"
+      }
+    ]
+  }'
+```
+
+```python Python
+import httpx
+
+payload = {
+    "claim_id": "clm_01HXB1C2D3E4F5G6H7I8J9K0L",
+    "payment_type": "era",
+    "paid_amount": 105.00,
+    "payment_date": "2024-01-29",
+    "check_number": "EFT-2024-0129-001",
+    "adjustment_reason_codes": [
+        {
+            "code": "CO-45",
+            "amount": 15.00,
+            "description": "Contractual obligation: exceeds fee schedule",
+        }
+    ],
+}
+
+response = httpx.post(
+    "https://api.codecraftinghub.com/v1/payments",
+    headers={"Authorization": "Bearer YOUR_API_KEY"},
+    json=payload,
+)
+payment = response.json()
+print(payment["id"])
+```
+</CodeGroup>
+
+<Note>
+  The sum of `paid_amount` and all `adjustment_reason_codes[].amount` values should equal the claim's `total_charge`. If the figures do not reconcile, the API returns a `422 Unprocessable Entity` with an `amount_mismatch` error code. Include all adjustments, including `CO-45` contractual write-offs, to satisfy this validation.
+</Note>
+
+<Warning>
+  Posting a duplicate payment (same `claim_id`, `payment_date`, and `paid_amount`) within 24 hours returns `409 Conflict` to prevent accidental double-posting. Use the `check_number` or `era_id` fields as an idempotency hint to distinguish legitimate re-posts.
+</Warning>
+
+## Response
+
+A successful request returns HTTP **201 Created** with the new payment record.
+
+<ResponseField name="id" type="string">
+  Platform-generated payment identifier. Prefix: `pay_`.
+</ResponseField>
+
+<ResponseField name="claim_id" type="string">
+  The claim this payment was posted against.
+</ResponseField>
+
+<ResponseField name="paid_amount" type="number">
+  The payment amount posted in USD.
+</ResponseField>
+
+<ResponseField name="payment_date" type="string">
+  Date of payment in `YYYY-MM-DD` format.
+</ResponseField>
+
+<ResponseField name="payment_type" type="string">
+  The type of payment posted.
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 timestamp of when the payment record was created.
+</ResponseField>
+
+```json 201 Created
+{
+  "id": "pay_01HXH1I2J3K4L5M6N7O8P9Q0R",
+  "claim_id": "clm_01HXB1C2D3E4F5G6H7I8J9K0L",
+  "paid_amount": 105.00,
+  "payment_date": "2024-01-29",
+  "payment_type": "era",
+  "created_at": "2024-01-29T12:00:00Z"
+}
+```
+
+<Tip>
+  After posting an ERA payment, verify the linked claim's status has transitioned to `paid` by calling [GET /claims/{id}](/api-reference/claims/status). If the claim still shows `accepted`, a brief processing delay may be in progress—retry after a few seconds.
+</Tip>

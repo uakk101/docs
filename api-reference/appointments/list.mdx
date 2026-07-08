@@ -1,0 +1,153 @@
+---
+title: "GET /appointments — List Appointments with Filters"
+sidebarTitle: "GET /appointments"
+description: "Retrieve a paginated list of appointments, filterable by provider NPI, patient, date range, status, and appointment type for schedule management."
+---
+
+You query the appointments list to build provider schedules, generate daily patient rosters, or power your own scheduling UI. Every query parameter is optional—sending the request with no filters returns all appointments in your organization, paginated. You need at minimum the `read` scope to call this endpoint.
+
+## Request
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token for API authentication. Format: `Bearer YOUR_API_KEY`.
+</ParamField>
+
+<ParamField query="provider_npi" type="string">
+  Filter appointments to a specific provider by their 10-digit NPI.
+</ParamField>
+
+<ParamField query="patient_id" type="string">
+  Filter appointments to a specific patient by their platform ID.
+</ParamField>
+
+<ParamField query="date" type="string">
+  Return only appointments occurring on a specific date (`YYYY-MM-DD`). Mutually exclusive with `start_date` / `end_date`.
+</ParamField>
+
+<ParamField query="start_date" type="string">
+  Start of a date range filter in `YYYY-MM-DD` format. Use together with `end_date` for range queries.
+</ParamField>
+
+<ParamField query="end_date" type="string">
+  End of a date range filter in `YYYY-MM-DD` format. Use together with `start_date`.
+</ParamField>
+
+<ParamField query="status" type="string">
+  Filter by appointment lifecycle status. Accepted values: `scheduled`, `confirmed`, `completed`, `cancelled`, `no_show`.
+</ParamField>
+
+<ParamField query="appointment_type" type="string">
+  Filter by visit category: `new_patient`, `follow_up`, `telehealth`, `procedure`.
+</ParamField>
+
+<ParamField query="page" type="integer">
+  Page number to retrieve. Defaults to `1`.
+</ParamField>
+
+<ParamField query="per_page" type="integer">
+  Number of records per page. Defaults to `25`, maximum `100`.
+</ParamField>
+
+<CodeGroup>
+```bash cURL
+curl 'https://api.codecraftinghub.com/v1/appointments?provider_npi=1234567890&date=2024-01-20' \
+  -H 'Authorization: Bearer YOUR_API_KEY'
+```
+
+```python Python
+import httpx
+
+response = httpx.get(
+    "https://api.codecraftinghub.com/v1/appointments",
+    headers={"Authorization": "Bearer YOUR_API_KEY"},
+    params={
+        "provider_npi": "1234567890",
+        "date": "2024-01-20",
+    },
+)
+result = response.json()
+
+for appt in result["data"]:
+    print(appt["id"], appt["start_time"], appt["status"])
+```
+</CodeGroup>
+
+<Note>
+  You cannot combine the `date` shortcut with `start_date` or `end_date` in the same request. Use one approach or the other. Sending both will return a `400 Bad Request` with a `conflicting_date_filters` error code.
+</Note>
+
+## Response
+
+A successful request returns HTTP **200 OK** with a paginated list of appointment objects.
+
+<ResponseField name="data" type="array">
+  Array of appointment objects matching the applied filters.
+
+  <Expandable title="appointment object fields">
+    <ResponseField name="id" type="string">
+      Platform-generated appointment identifier. Prefix: `appt_`.
+    </ResponseField>
+    <ResponseField name="patient_id" type="string">
+      The patient scheduled for this appointment.
+    </ResponseField>
+    <ResponseField name="provider_npi" type="string">
+      NPI of the provider.
+    </ResponseField>
+    <ResponseField name="start_time" type="string">
+      Appointment start time in ISO 8601 format with timezone.
+    </ResponseField>
+    <ResponseField name="end_time" type="string">
+      Appointment end time in ISO 8601 format with timezone.
+    </ResponseField>
+    <ResponseField name="status" type="string">
+      Current appointment status.
+    </ResponseField>
+    <ResponseField name="appointment_type" type="string">
+      Visit category.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="pagination" type="object">
+  Pagination metadata for the current result set.
+
+  <Expandable title="pagination fields">
+    <ResponseField name="page" type="integer">
+      Current page number.
+    </ResponseField>
+    <ResponseField name="per_page" type="integer">
+      Number of results per page.
+    </ResponseField>
+    <ResponseField name="total" type="integer">
+      Total number of matching appointments across all pages.
+    </ResponseField>
+    <ResponseField name="total_pages" type="integer">
+      Total number of pages available.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+```json 200 OK
+{
+  "data": [
+    {
+      "id": "appt_01HXI1J2K3L4M5N6O7P8Q9R0S",
+      "patient_id": "pat_01HX9Z2K3M4N5P6Q7R8S9T0U",
+      "start_time": "2024-01-20T09:00:00-06:00",
+      "end_time": "2024-01-20T09:30:00-06:00",
+      "status": "scheduled",
+      "appointment_type": "follow_up"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "per_page": 25,
+    "total": 1,
+    "total_pages": 1
+  }
+}
+```
+
+<Tip>
+  To build a daily schedule view, filter by `provider_npi` and `date` together. To find all upcoming appointments for a patient across all providers, filter by `patient_id` and `start_date` set to today's date.
+</Tip>

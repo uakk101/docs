@@ -1,13 +1,11 @@
 {
-  "$schema": "https://mintlify.com/docs.json",
+  "projectType": "saas",
+  "projectName": "CodeCrafting Hub EHR & RCM",
+  "projectDescription": "A healthcare SaaS platform providing Electronic Health Records (EHR) and Revenue Cycle Management (RCM) APIs for healthcare organizations to manage patients, clinical workflows, billing, and claims.",
   "theme": "luma",
-  "name": "CodeCrafting Hub",
-  "colors": {
-    "primary": "#ef7025",
-    "light": "#eec9bc",
-    "dark": "#4fa1ab"
-  },
-  "favicon": "/favicon.svg",
+  "primaryColor": "#ef7025",
+  "lightColor": "#eec9bc",
+  "darkColor": "#4fa1ab",
   "navigation": {
     "tabs": [
       {
@@ -102,23 +100,35 @@
       }
     ]
   },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:support@codecraftinghub.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Get API Access",
-      "href": "https://app.codecraftinghub.com/signup"
-    }
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/codecraftinghub",
-      "linkedin": "https://linkedin.com/company/codecraftinghub"
-    }
-  }
+  "keyFeatures": [
+    "Patient demographic management and registration",
+    "Clinical encounter documentation and SOAP notes",
+    "Insurance eligibility verification in real-time",
+    "Medical claims submission (837P/837I) and tracking",
+    "Automated ERA/EOB remittance processing",
+    "Appointment scheduling and calendar management",
+    "FHIR R4 compliant data exchange",
+    "HIPAA-compliant data storage and transmission",
+    "Webhook notifications for claim status changes",
+    "Revenue analytics and denial management"
+  ],
+  "publicApiSurface": [
+    "POST /patients — Create a new patient record",
+    "GET /patients/{id} — Retrieve patient demographics",
+    "PUT /patients/{id} — Update patient information",
+    "GET /patients/search — Search patients by name, DOB, MRN",
+    "POST /encounters — Create a clinical encounter",
+    "GET /encounters/{id} — Retrieve encounter details",
+    "PUT /encounters/{id} — Update encounter / add diagnoses",
+    "POST /encounters/{id}/notes — Add clinical note to encounter",
+    "POST /eligibility/check — Verify insurance eligibility",
+    "POST /claims — Submit a professional or institutional claim",
+    "GET /claims/{id} — Get claim status",
+    "POST /payments — Post an electronic remittance (ERA)",
+    "POST /appointments — Schedule an appointment",
+    "GET /appointments — List appointments by provider/date",
+    "DELETE /appointments/{id} — Cancel an appointment",
+    "GET /webhooks — List configured webhook endpoints",
+    "POST /webhooks — Register a new webhook endpoint"
+  ]
 }

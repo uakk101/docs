@@ -1,0 +1,169 @@
+---
+title: "Pagination — CodeCrafting Hub REST API"
+sidebarTitle: "Pagination"
+description: "Navigate large result sets with page-based or cursor-based pagination, understand the response envelope, and iterate efficiently in code."
+---
+
+Every list endpoint in the CodeCrafting Hub API returns a paginated response rather than dumping all matching records at once. This keeps response times fast, memory usage predictable, and your integration stable even as your data volume grows into the hundreds of thousands of records. Two pagination strategies are available depending on the endpoint and your use case: **page-based** pagination for most general queries and **cursor-based** pagination for high-volume or streaming workloads.
+
+## Page-Based Pagination
+
+### Query Parameters
+
+Control which page of results you receive by passing the following query parameters on any list request:
+
+<ParamField query="page" type="integer" default="1">
+  The page number to return. Pages are 1-indexed — the first page is `page=1`.
+</ParamField>
+
+<ParamField query="per_page" type="integer" default="25">
+  The number of records to include per page. The minimum is `1` and the maximum is `100`. Requests above 100 are clamped to 100.
+</ParamField>
+
+### Response Envelope
+
+Every list response wraps the results in a standard envelope with a `data` array and a `pagination` object:
+
+```json
+{
+  "data": [
+    { "id": "pat_abc", "first_name": "Alice", "last_name": "Brown" },
+    { "id": "pat_def", "first_name": "Bob",   "last_name": "Chen"  }
+  ],
+  "pagination": {
+    "page": 2,
+    "per_page": 50,
+    "total": 142,
+    "total_pages": 3
+  }
+}
+```
+
+The `pagination` object fields mean the following:
+
+| Field         | Type    | Description                                                    |
+|---------------|---------|----------------------------------------------------------------|
+| `page`        | integer | The current page number returned in this response              |
+| `per_page`    | integer | The number of records requested per page                       |
+| `total`       | integer | Total number of records matching your query across all pages   |
+| `total_pages` | integer | Total number of pages at the current `per_page` size           |
+
+### Example Request
+
+Fetch the second page of patients with 50 records per page:
+
+```bash
+curl 'https://api.codecraftinghub.com/v1/patients?page=2&per_page=50' \
+  -H 'Authorization: Bearer YOUR_API_KEY'
+```
+
+<Tip>
+  Use `per_page=100` when you need to retrieve large data sets — it halves the number of requests compared to the default of 25 and reduces overall latency significantly.
+</Tip>
+
+## Cursor-Based Pagination
+
+For high-volume endpoints — such as claims export, bulk event streams, and audit logs — cursor-based pagination is available and recommended. Rather than jumping to a page number, you follow an opaque cursor that the API returns with each response. This approach is more efficient at scale and guarantees consistency even when records are being added or modified between requests.
+
+### Query Parameters
+
+<ParamField query="cursor" type="string">
+  An opaque cursor string returned by the previous response as `next_cursor`. Omit this parameter to start from the beginning of the result set.
+</ParamField>
+
+<ParamField query="per_page" type="integer" default="25">
+  The number of records per page. Maximum is `100`.
+</ParamField>
+
+### Example Request
+
+Start a cursor-based walk through the claims list with 100 records per page:
+
+```bash
+curl 'https://api.codecraftinghub.com/v1/claims?cursor=clm_01HXB...&per_page=100' \
+  -H 'Authorization: Bearer YOUR_API_KEY'
+```
+
+### Cursor Response Envelope
+
+Cursor-based responses replace `page` and `total_pages` with `cursor`, `next_cursor`, and `has_more`:
+
+```json
+{
+  "data": [...],
+  "pagination": {
+    "cursor":      "clm_01HXC...",
+    "next_cursor": "clm_01HXD...",
+    "per_page":    100,
+    "has_more":    true
+  }
+}
+```
+
+| Field          | Type    | Description                                                               |
+|----------------|---------|---------------------------------------------------------------------------|
+| `cursor`       | string  | The cursor used to fetch this page                                        |
+| `next_cursor`  | string  | Pass this as `cursor` in your next request to fetch the following page    |
+| `per_page`     | integer | The number of records returned in this response                           |
+| `has_more`     | boolean | `true` if additional records exist beyond this page; `false` when done    |
+
+<Warning>
+  Cursors are short-lived and expire after **15 minutes** of inactivity. If your processing loop pauses longer than that, restart the walk from the beginning or from the last successfully processed record's ID.
+</Warning>
+
+## Filtering and Sorting
+
+Most list endpoints accept additional query parameters to filter and sort results. Common parameters include `created_after`, `created_before`, `status`, and `sort` with a direction suffix (`field_asc` or `field_desc`). Check the individual endpoint reference for the full list of supported filters.
+
+<Note>
+  Filtering parameters work with both page-based and cursor-based pagination. Apply your filters on the first request and carry the same filter parameters through every subsequent page or cursor request to keep the result set consistent.
+</Note>
+
+## Iterating Through All Records in Code
+
+When you need to collect every record matching a query, use a loop that advances the page (or cursor) until no more records remain. The examples below show page-based iteration — swap in the cursor pattern for cursor-enabled endpoints.
+
+<CodeGroup>
+```python Python
+import requests
+
+def get_all_patients(api_key):
+    patients = []
+    page = 1
+    while True:
+        resp = requests.get(
+            f'https://api.codecraftinghub.com/v1/patients?page={page}&per_page=100',
+            headers={'Authorization': f'Bearer {api_key}'}
+        ).json()
+        patients.extend(resp['data'])
+        if page >= resp['pagination']['total_pages']:
+            break
+        page += 1
+    return patients
+```
+
+```javascript Node.js
+async function getAllPatients(apiKey) {
+  const patients = [];
+  let page = 1;
+
+  while (true) {
+    const resp = await fetch(
+      `https://api.codecraftinghub.com/v1/patients?page=${page}&per_page=100`,
+      { headers: { Authorization: `Bearer ${apiKey}` } }
+    ).then((r) => r.json());
+
+    patients.push(...resp.data);
+
+    if (page >= resp.pagination.total_pages) break;
+    page++;
+  }
+
+  return patients;
+}
+```
+</CodeGroup>
+
+<Tip>
+  If you only need to process records rather than collect them all in memory, stream through pages one at a time and process each `data` array before requesting the next page. This keeps memory usage constant regardless of how many total records match your query.
+</Tip>

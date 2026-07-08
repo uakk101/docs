@@ -1,0 +1,143 @@
+---
+title: "POST /appointments — Schedule a New Patient Appointment"
+sidebarTitle: "POST /appointments"
+description: "Create a new appointment for a patient with a provider, specifying start and end times, visit type, and optional location details."
+---
+
+You schedule appointments through this endpoint to block time on a provider's calendar and create the scheduling record that precedes an encounter. Once the appointment is confirmed and the visit occurs, you can link it to a new encounter for documentation and billing. You need at minimum the `read-write` scope to call this endpoint.
+
+## Request
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token for API authentication. Format: `Bearer YOUR_API_KEY`.
+</ParamField>
+
+<ParamField body="patient_id" type="string" required>
+  The platform identifier for the patient being scheduled. Prefix: `pat_`.
+</ParamField>
+
+<ParamField body="provider_npi" type="string" required>
+  The 10-digit NPI of the provider the appointment is scheduled with.
+</ParamField>
+
+<ParamField body="start_time" type="string" required>
+  The appointment start time as an ISO 8601 datetime string including timezone offset (e.g., `2024-01-20T09:00:00-06:00`).
+</ParamField>
+
+<ParamField body="end_time" type="string" required>
+  The appointment end time as an ISO 8601 datetime string including timezone offset. Must be after `start_time`.
+</ParamField>
+
+<ParamField body="appointment_type" type="string">
+  The category of appointment. Accepted values: `new_patient`, `follow_up`, `telehealth`, `procedure`.
+</ParamField>
+
+<ParamField body="location_id" type="string">
+  The platform identifier of the clinic or facility where the appointment will take place. Omit for telehealth appointments.
+</ParamField>
+
+<ParamField body="reason" type="string">
+  Chief complaint or reason for the visit. This is surfaced to front-desk and clinical staff at check-in.
+</ParamField>
+
+<ParamField body="notes" type="string">
+  Free-text scheduling notes visible to staff (e.g., special accommodations or arrival instructions).
+</ParamField>
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://api.codecraftinghub.com/v1/appointments \
+  -H 'Authorization: Bearer YOUR_API_KEY' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "patient_id": "pat_01HX9Z2K3M4N5P6Q7R8S9T0U",
+    "provider_npi": "1234567890",
+    "start_time": "2024-01-20T09:00:00-06:00",
+    "end_time": "2024-01-20T09:30:00-06:00",
+    "appointment_type": "follow_up",
+    "reason": "Follow-up for acute pharyngitis"
+  }'
+```
+
+```python Python
+import httpx
+
+payload = {
+    "patient_id": "pat_01HX9Z2K3M4N5P6Q7R8S9T0U",
+    "provider_npi": "1234567890",
+    "start_time": "2024-01-20T09:00:00-06:00",
+    "end_time": "2024-01-20T09:30:00-06:00",
+    "appointment_type": "follow_up",
+    "reason": "Follow-up for acute pharyngitis",
+}
+
+response = httpx.post(
+    "https://api.codecraftinghub.com/v1/appointments",
+    headers={"Authorization": "Bearer YOUR_API_KEY"},
+    json=payload,
+)
+appointment = response.json()
+print(appointment["id"])
+```
+</CodeGroup>
+
+<Note>
+  Always include a UTC offset in `start_time` and `end_time` to avoid ambiguity across time zones. The API stores all timestamps internally in UTC but preserves the original offset in responses for display purposes.
+</Note>
+
+<Warning>
+  If the requested time slot conflicts with an existing appointment for the same `provider_npi`, the API returns `409 Conflict`. Check provider availability using [GET /appointments](/api-reference/appointments/list) before scheduling to avoid conflicts.
+</Warning>
+
+## Response
+
+A successful request returns HTTP **201 Created** with the new appointment object.
+
+<ResponseField name="id" type="string">
+  Platform-generated appointment identifier. Prefix: `appt_`.
+</ResponseField>
+
+<ResponseField name="patient_id" type="string">
+  The patient scheduled for this appointment.
+</ResponseField>
+
+<ResponseField name="provider_npi" type="string">
+  NPI of the provider the appointment is with.
+</ResponseField>
+
+<ResponseField name="start_time" type="string">
+  Appointment start time in ISO 8601 format with timezone offset.
+</ResponseField>
+
+<ResponseField name="end_time" type="string">
+  Appointment end time in ISO 8601 format with timezone offset.
+</ResponseField>
+
+<ResponseField name="appointment_type" type="string">
+  The visit category as submitted.
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Initial appointment status. Always `scheduled` on creation.
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 timestamp of when the appointment was created.
+</ResponseField>
+
+```json 201 Created
+{
+  "id": "appt_01HXI1J2K3L4M5N6O7P8Q9R0S",
+  "patient_id": "pat_01HX9Z2K3M4N5P6Q7R8S9T0U",
+  "provider_npi": "1234567890",
+  "start_time": "2024-01-20T09:00:00-06:00",
+  "end_time": "2024-01-20T09:30:00-06:00",
+  "appointment_type": "follow_up",
+  "status": "scheduled",
+  "created_at": "2024-01-15T14:00:00Z"
+}
+```
+
+<Tip>
+  After creating an appointment, run a real-time eligibility check using [POST /eligibility/check](/api-reference/eligibility/check) so front-desk staff can verify coverage and collect the appropriate copay before the visit.
+</Tip>

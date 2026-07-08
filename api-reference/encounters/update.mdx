@@ -1,0 +1,208 @@
+---
+title: "PUT /encounters/{id} — Update a Clinical Encounter"
+sidebarTitle: "PUT /encounters/{id}"
+description: "Update an existing encounter to add diagnoses, modify procedures, adjust place of service, or advance its lifecycle status toward billing."
+---
+
+As a clinical encounter progresses from documentation to billing, you use this endpoint to keep its data current—adding or replacing diagnoses and procedures, adjusting the place of service, and advancing the encounter through its lifecycle status. You need at minimum the `read-write` scope to call this endpoint.
+
+## Status Lifecycle
+
+Encounters follow a strict forward-only status progression. You cannot revert a status to an earlier state.
+
+```
+draft → in_progress → completed → billed
+```
+
+<Warning>
+  The `patient_id`, `service_date`, and `provider_npi` fields are immutable and cannot be changed via this endpoint. If you need to correct any of those values, void the existing encounter and create a new one using [POST /encounters](/api-reference/encounters/create).
+</Warning>
+
+## Request
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token for API authentication. Format: `Bearer YOUR_API_KEY`.
+</ParamField>
+
+<ParamField path="id" type="string" required>
+  The platform identifier of the encounter to update. Prefix: `enc_`.
+</ParamField>
+
+<ParamField body="encounter_type" type="string">
+  Change the encounter category. Accepted values: `office_visit`, `telehealth`, `inpatient`, `outpatient`, `emergency`.
+</ParamField>
+
+<ParamField body="place_of_service" type="string">
+  Updated CMS Place of Service code for the care setting.
+</ParamField>
+
+<ParamField body="diagnoses" type="array">
+  Replaces the full diagnoses list on the encounter. Include all diagnoses you want retained—any codes omitted from this array will be removed.
+
+  <Expandable title="diagnoses object fields">
+    <ParamField body="code" type="string" required>
+      The diagnosis code (e.g., `J06.9`).
+    </ParamField>
+    <ParamField body="system" type="string" required>
+      Code system. Use `ICD-10-CM`.
+    </ParamField>
+    <ParamField body="sequence" type="integer" required>
+      Ordering sequence starting at `1`.
+    </ParamField>
+    <ParamField body="description" type="string">
+      Human-readable description of the diagnosis.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="procedures" type="array">
+  Replaces the full procedures list on the encounter. Include all procedures you want retained.
+
+  <Expandable title="procedures object fields">
+    <ParamField body="code" type="string" required>
+      The procedure code (e.g., `99213`).
+    </ParamField>
+    <ParamField body="system" type="string" required>
+      Code system. Use `CPT` or `HCPCS`.
+    </ParamField>
+    <ParamField body="sequence" type="integer" required>
+      Ordering sequence starting at `1`.
+    </ParamField>
+    <ParamField body="units" type="integer">
+      Number of units performed.
+    </ParamField>
+    <ParamField body="charge" type="number">
+      Billed charge amount in USD.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="status" type="string">
+  Advance the encounter to the next lifecycle status. Must follow the `draft → in_progress → completed → billed` sequence.
+</ParamField>
+
+<CodeGroup>
+```bash cURL
+curl -X PUT https://api.codecraftinghub.com/v1/encounters/enc_01HXA1B2C3D4E5F6G7H8I9J0K \
+  -H 'Authorization: Bearer YOUR_API_KEY' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "diagnoses": [
+      {
+        "code": "J06.9",
+        "system": "ICD-10-CM",
+        "sequence": 1,
+        "description": "Acute upper respiratory infection"
+      }
+    ],
+    "procedures": [
+      {
+        "code": "99213",
+        "system": "CPT",
+        "sequence": 1,
+        "units": 1,
+        "charge": 150.00
+      }
+    ],
+    "status": "completed"
+  }'
+```
+
+```python Python
+import httpx
+
+encounter_id = "enc_01HXA1B2C3D4E5F6G7H8I9J0K"
+
+payload = {
+    "diagnoses": [
+        {
+            "code": "J06.9",
+            "system": "ICD-10-CM",
+            "sequence": 1,
+            "description": "Acute upper respiratory infection",
+        }
+    ],
+    "procedures": [
+        {
+            "code": "99213",
+            "system": "CPT",
+            "sequence": 1,
+            "units": 1,
+            "charge": 150.00,
+        }
+    ],
+    "status": "completed",
+}
+
+response = httpx.put(
+    f"https://api.codecraftinghub.com/v1/encounters/{encounter_id}",
+    headers={"Authorization": "Bearer YOUR_API_KEY"},
+    json=payload,
+)
+updated = response.json()
+print(updated["status"])  # "completed"
+```
+</CodeGroup>
+
+<Tip>
+  Set `status` to `completed` only when documentation is finalized and the encounter is ready for claim submission. Once an encounter reaches `billed`, it becomes read-only and cannot be modified.
+</Tip>
+
+## Response
+
+A successful request returns HTTP **200 OK** with the full updated encounter object.
+
+<ResponseField name="id" type="string">
+  Platform-generated encounter identifier. Prefix: `enc_`.
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  The updated lifecycle status of the encounter.
+</ResponseField>
+
+<ResponseField name="diagnoses" type="array">
+  The current complete list of diagnoses after the update.
+</ResponseField>
+
+<ResponseField name="procedures" type="array">
+  The current complete list of procedures after the update.
+</ResponseField>
+
+<ResponseField name="updated_at" type="string">
+  ISO 8601 timestamp of when this update was applied.
+</ResponseField>
+
+```json 200 OK
+{
+  "id": "enc_01HXA1B2C3D4E5F6G7H8I9J0K",
+  "patient_id": "pat_01HX9Z2K3M4N5P6Q7R8S9T0U",
+  "provider_npi": "1234567890",
+  "service_date": "2024-01-15",
+  "encounter_type": "office_visit",
+  "place_of_service": "11",
+  "status": "completed",
+  "diagnoses": [
+    {
+      "code": "J06.9",
+      "system": "ICD-10-CM",
+      "sequence": 1,
+      "description": "Acute upper respiratory infection"
+    }
+  ],
+  "procedures": [
+    {
+      "code": "99213",
+      "system": "CPT",
+      "sequence": 1,
+      "units": 1,
+      "charge": 150.00
+    }
+  ],
+  "created_at": "2024-01-15T14:00:00Z",
+  "updated_at": "2024-01-15T15:30:00Z"
+}
+```
+
+<Note>
+  Attempting an invalid status transition (e.g., jumping from `draft` directly to `billed`) returns a `422 Unprocessable Entity` error with a `status_transition_invalid` error code.
+</Note>

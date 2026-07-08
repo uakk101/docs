@@ -1,0 +1,235 @@
+---
+title: "POST /encounters — Create a New Clinical Encounter"
+sidebarTitle: "POST /encounters"
+description: "Create a new clinical encounter for a patient, capturing diagnoses, procedures, place of service, and encounter type in a single request."
+---
+
+When a patient visit begins, you create an encounter to anchor every clinical and billing event that follows. This endpoint opens a new encounter record in the `in_progress` status and accepts diagnoses and procedures up front so downstream claim submission can start immediately. You need the `read-write` or `admin` scope to call this endpoint.
+
+## Request
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token for API authentication. Format: `Bearer YOUR_API_KEY`.
+</ParamField>
+
+<ParamField body="patient_id" type="string" required>
+  The platform identifier for the patient. Prefix: `pat_`.
+</ParamField>
+
+<ParamField body="provider_npi" type="string" required>
+  The 10-digit National Provider Identifier (NPI) of the rendering provider.
+</ParamField>
+
+<ParamField body="service_date" type="string" required>
+  The date of service in `YYYY-MM-DD` format.
+</ParamField>
+
+<ParamField body="encounter_type" type="string" default="office_visit">
+  The type of clinical encounter. Accepted values: `office_visit`, `telehealth`, `inpatient`, `outpatient`, `emergency`.
+</ParamField>
+
+<ParamField body="place_of_service" type="string" default='"11"'>
+  The CMS Place of Service (POS) code for the location where care was delivered. Defaults to `"11"` (Office).
+</ParamField>
+
+<ParamField body="diagnoses" type="array">
+  An ordered list of diagnosis codes attached to this encounter.
+
+  <Expandable title="diagnoses object fields">
+    <ParamField body="code" type="string" required>
+      The diagnosis code (e.g., `J06.9`).
+    </ParamField>
+    <ParamField body="system" type="string" required>
+      Code system. Use `ICD-10-CM`.
+    </ParamField>
+    <ParamField body="sequence" type="integer" required>
+      Ordering sequence starting at `1`. The first diagnosis drives primary billing.
+    </ParamField>
+    <ParamField body="description" type="string">
+      Human-readable description of the diagnosis.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="procedures" type="array">
+  An ordered list of procedure codes performed during this encounter.
+
+  <Expandable title="procedures object fields">
+    <ParamField body="code" type="string" required>
+      The procedure code (e.g., `99213`).
+    </ParamField>
+    <ParamField body="system" type="string" required>
+      Code system. Use `CPT` or `HCPCS`.
+    </ParamField>
+    <ParamField body="sequence" type="integer" required>
+      Ordering sequence starting at `1`.
+    </ParamField>
+    <ParamField body="description" type="string">
+      Human-readable description of the procedure.
+    </ParamField>
+    <ParamField body="units" type="integer">
+      Number of units performed. Defaults to `1`.
+    </ParamField>
+    <ParamField body="charge" type="number">
+      Billed charge amount in USD (e.g., `150.00`).
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="notes" type="string">
+  Free-text clinical note to attach inline. For structured SOAP notes, use the [POST /encounters/{id}/notes](/api-reference/clinical-notes/create) endpoint instead.
+</ParamField>
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://api.codecraftinghub.com/v1/encounters \
+  -H 'Authorization: Bearer YOUR_API_KEY' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "patient_id": "pat_01HX9Z2K3M4N5P6Q7R8S9T0U",
+    "provider_npi": "1234567890",
+    "service_date": "2024-01-15",
+    "encounter_type": "office_visit",
+    "place_of_service": "11",
+    "diagnoses": [
+      {
+        "code": "J06.9",
+        "system": "ICD-10-CM",
+        "sequence": 1,
+        "description": "Acute upper respiratory infection"
+      }
+    ],
+    "procedures": [
+      {
+        "code": "99213",
+        "system": "CPT",
+        "sequence": 1,
+        "description": "Office visit, moderate complexity",
+        "units": 1,
+        "charge": 150.00
+      }
+    ]
+  }'
+```
+
+```python Python
+import httpx
+
+payload = {
+    "patient_id": "pat_01HX9Z2K3M4N5P6Q7R8S9T0U",
+    "provider_npi": "1234567890",
+    "service_date": "2024-01-15",
+    "encounter_type": "office_visit",
+    "place_of_service": "11",
+    "diagnoses": [
+        {
+            "code": "J06.9",
+            "system": "ICD-10-CM",
+            "sequence": 1,
+            "description": "Acute upper respiratory infection",
+        }
+    ],
+    "procedures": [
+        {
+            "code": "99213",
+            "system": "CPT",
+            "sequence": 1,
+            "description": "Office visit, moderate complexity",
+            "units": 1,
+            "charge": 150.00,
+        }
+    ],
+}
+
+response = httpx.post(
+    "https://api.codecraftinghub.com/v1/encounters",
+    headers={"Authorization": "Bearer YOUR_API_KEY"},
+    json=payload,
+)
+encounter = response.json()
+print(encounter["id"])
+```
+</CodeGroup>
+
+<Note>
+  The `service_date`, `patient_id`, and `provider_npi` fields are immutable after creation. If you need to correct any of these values, create a new encounter and void the original.
+</Note>
+
+## Response
+
+A successful request returns HTTP **201 Created** with the newly created encounter object.
+
+<ResponseField name="id" type="string">
+  Platform-generated encounter identifier. Prefix: `enc_`.
+</ResponseField>
+
+<ResponseField name="patient_id" type="string">
+  The patient this encounter belongs to.
+</ResponseField>
+
+<ResponseField name="provider_npi" type="string">
+  NPI of the rendering provider on record.
+</ResponseField>
+
+<ResponseField name="service_date" type="string">
+  Date of service in `YYYY-MM-DD` format.
+</ResponseField>
+
+<ResponseField name="encounter_type" type="string">
+  The encounter category (e.g., `office_visit`).
+</ResponseField>
+
+<ResponseField name="place_of_service" type="string">
+  CMS POS code for the care setting.
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Current lifecycle status. Newly created encounters start as `in_progress`.
+</ResponseField>
+
+<ResponseField name="diagnoses" type="array">
+  List of diagnosis objects as submitted.
+</ResponseField>
+
+<ResponseField name="procedures" type="array">
+  List of procedure objects as submitted.
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 timestamp of when the encounter was created.
+</ResponseField>
+
+```json 201 Created
+{
+  "id": "enc_01HXA1B2C3D4E5F6G7H8I9J0K",
+  "patient_id": "pat_01HX9Z2K3M4N5P6Q7R8S9T0U",
+  "provider_npi": "1234567890",
+  "service_date": "2024-01-15",
+  "encounter_type": "office_visit",
+  "place_of_service": "11",
+  "status": "in_progress",
+  "diagnoses": [
+    {
+      "code": "J06.9",
+      "system": "ICD-10-CM",
+      "sequence": 1,
+      "description": "Acute upper respiratory infection"
+    }
+  ],
+  "procedures": [
+    {
+      "code": "99213",
+      "system": "CPT",
+      "sequence": 1,
+      "description": "Office visit, moderate complexity",
+      "units": 1,
+      "charge": 150.00
+    }
+  ],
+  "created_at": "2024-01-15T14:00:00Z"
+}
+```
+
+<Warning>
+  Submitting a claim against an encounter that has not reached `completed` status will return a `422 Unprocessable Entity` error. Transition the encounter to `completed` via [PUT /encounters/{id}](/api-reference/encounters/update) before billing.
+</Warning>

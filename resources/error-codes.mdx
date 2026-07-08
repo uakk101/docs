@@ -1,0 +1,204 @@
+---
+title: "API Error Codes & Troubleshooting Reference"
+sidebarTitle: "Error Codes"
+description: "Understand every CodeCrafting Hub API error code, HTTP status, and response format — plus how to resolve common issues quickly."
+---
+
+When a request to the CodeCrafting Hub API cannot be completed successfully, the response always includes a JSON error body with enough detail to identify and resolve the problem. Every error response follows the same structure, making it straightforward to handle errors consistently across all endpoints in your integration.
+
+## Error Response Structure
+
+All error responses return a JSON object with the following top-level fields:
+
+| Field | Type | Description |
+|---|---|---|
+| `error` | string | Machine-readable error code (e.g., `validation_error`) |
+| `message` | string | Human-readable description of the error |
+| `status` | integer | The HTTP status code |
+| `request_id` | string | Unique request identifier — include this when contacting support |
+| `errors` | array | *(422 only)* Field-level validation error details |
+
+## HTTP Status Codes
+
+CodeCrafting Hub uses the following standard HTTP status codes:
+
+| Status | Meaning |
+|---|---|
+| `200 OK` | Request succeeded |
+| `201 Created` | Resource successfully created |
+| `400 Bad Request` | Malformed request syntax or missing required field |
+| `401 Unauthorized` | Missing or invalid API key |
+| `403 Forbidden` | Valid API key but insufficient scope for this operation |
+| `404 Not Found` | The requested resource does not exist |
+| `409 Conflict` | A duplicate record conflicts with an existing resource |
+| `422 Unprocessable Entity` | Request is well-formed but fails field-level validation |
+| `429 Too Many Requests` | Rate limit exceeded |
+| `500 Internal Server Error` | Platform error — not caused by your request |
+
+## Error Code Reference
+
+### `invalid_request` — 400
+
+The request body contains malformed JSON, or a required field is missing entirely.
+
+```json
+{
+  "error": "invalid_request",
+  "message": "Request body is missing required field: patient_id",
+  "status": 400,
+  "request_id": "req_01HXE1F2G3H4I5J6K7L8M9N0O"
+}
+```
+
+**Fix:** Validate that your request body is valid JSON and includes all required fields documented for the endpoint.
+
+---
+
+### `unauthorized` — 401
+
+No API key was provided, or the key is malformed, expired, or revoked.
+
+```json
+{
+  "error": "unauthorized",
+  "message": "Invalid or missing API key",
+  "status": 401,
+  "request_id": "req_01HXE1F2G3H4I5J6K7L8M9N0O"
+}
+```
+
+**Fix:** Confirm you are sending `Authorization: Bearer YOUR_API_KEY` on every request and that the key is active in the dashboard.
+
+---
+
+### `forbidden` — 403
+
+The API key is valid, but it does not have the scope required to perform this operation.
+
+```json
+{
+  "error": "forbidden",
+  "message": "This API key does not have permission to create claims",
+  "status": 403,
+  "request_id": "req_01HXE1F2G3H4I5J6K7L8M9N0O"
+}
+```
+
+**Fix:** Navigate to **Settings → API Keys**, review the key's scopes, and enable the required permission or use a key that already has it.
+
+---
+
+### `not_found` — 404
+
+The resource ID in your request path does not match any existing record.
+
+```json
+{
+  "error": "not_found",
+  "message": "Patient pat_01HX9Z2K3M4N5P6Q7R8S9T0U not found",
+  "status": 404,
+  "request_id": "req_01HXE1F2G3H4I5J6K7L8M9N0O"
+}
+```
+
+**Fix:** Verify the resource ID is correct and was created in the same environment (production vs. sandbox). IDs are not shared between environments.
+
+---
+
+### `conflict` — 409
+
+Your request would create a duplicate record. This most commonly occurs when a patient with the same `external_id` already exists.
+
+```json
+{
+  "error": "conflict",
+  "message": "A patient with external_id 'MRN-00042' already exists",
+  "status": 409,
+  "request_id": "req_01HXE1F2G3H4I5J6K7L8M9N0O"
+}
+```
+
+**Fix:** Look up the existing record using the `external_id` search parameter and update it with `PATCH` rather than creating a new one.
+
+---
+
+### `validation_error` — 422
+
+The request is syntactically valid JSON and contains all required fields, but one or more field values fail business logic or format validation. The response includes an `errors` array with one entry per failing field.
+
+```json
+{
+  "error": "validation_error",
+  "message": "Request validation failed",
+  "status": 422,
+  "request_id": "req_01HXE1F2G3H4I5J6K7L8M9N0O",
+  "errors": [
+    {
+      "field": "date_of_birth",
+      "message": "must be a valid date in YYYY-MM-DD format"
+    },
+    {
+      "field": "gender",
+      "message": "must be one of: male, female, other, unknown"
+    }
+  ]
+}
+```
+
+**Fix:** Iterate over the `errors` array and correct each field listed. Each entry includes the exact `field` name (using dot notation for nested objects) and a human-readable description of the constraint.
+
+<Tip>
+  Map the `errors` array directly to your form validation UI to surface field-level error messages to end users without additional parsing.
+</Tip>
+
+---
+
+### `rate_limit_exceeded` — 429
+
+Your integration has exceeded the allowed request rate for your plan. All API responses include rate limit headers to help you track usage before hitting the limit.
+
+```json
+{
+  "error": "rate_limit_exceeded",
+  "message": "Rate limit exceeded. Retry after 2024-01-15T18:30:45Z",
+  "status": 429,
+  "request_id": "req_01HXE1F2G3H4I5J6K7L8M9N0O"
+}
+```
+
+| Header | Description |
+|---|---|
+| `X-RateLimit-Limit` | Maximum requests allowed per minute |
+| `X-RateLimit-Remaining` | Requests remaining in the current window |
+| `Retry-After` | ISO 8601 timestamp after which you may retry |
+
+**Fix:** Implement exponential backoff with jitter in your retry logic, and monitor `X-RateLimit-Remaining` to slow down proactively before reaching the limit.
+
+---
+
+### `internal_error` — 500
+
+An unexpected error occurred on the CodeCrafting Hub platform. This is not caused by your request.
+
+```json
+{
+  "error": "internal_error",
+  "message": "An unexpected error occurred. Please contact support.",
+  "status": 500,
+  "request_id": "req_01HXE1F2G3H4I5J6K7L8M9N0O"
+}
+```
+
+**Fix:** Retry the request once after a short delay. If the error persists, contact support and include the `request_id`.
+
+<Warning>
+  Do not retry `500` errors in a tight loop. Use exponential backoff, and alert your on-call team if you see a sustained spike in `500` responses — it may indicate a platform incident. Check [status.codecraftinghub.com](https://status.codecraftinghub.com) for live service health.
+</Warning>
+
+## Using `request_id` with Support
+
+Every error response includes a `request_id` field. When you open a support ticket or email [support@codecraftinghub.com](mailto:support@codecraftinghub.com), always include the `request_id` for the failing request. This allows the support team to look up the full server-side trace — including the exact payload received, the validation steps run, and any internal errors — without requiring you to reproduce the issue.
+
+<Info>
+  `request_id` values are retained for 90 days. If you are reporting an issue that occurred more than 90 days ago, the trace may no longer be available.
+</Info>

@@ -1,0 +1,264 @@
+---
+title: "Create a New Patient Record — POST /patients"
+sidebarTitle: "POST /patients"
+description: "Create a new patient record in CodeCrafting Hub by submitting demographic and contact information via a single POST request."
+---
+
+The Create Patient endpoint lets you register a new patient in the CodeCrafting Hub platform. You submit core demographic fields alongside optional contact, address, and coding data, and the API returns a fully populated patient object — including a platform-assigned ID and a Medical Record Number (MRN) — on success. Before calling this endpoint, make sure your API key carries the `read-write` or `admin` scope; requests authenticated with a `read`-only key will be rejected with `403 Forbidden`.
+
+## Endpoint
+
+```
+POST https://api.codecraftinghub.com/v1/patients
+```
+
+<Note>
+  **Scope required:** `read-write` or `admin`. Authenticate every request with
+  your API key in the `Authorization` header:
+  `Authorization: Bearer YOUR_API_KEY`.
+</Note>
+
+---
+
+## Request Body
+
+<ParamField body="first_name" type="string" required>
+  Patient's legal first name as it appears on official identification.
+</ParamField>
+
+<ParamField body="last_name" type="string" required>
+  Patient's legal last name as it appears on official identification.
+</ParamField>
+
+<ParamField body="date_of_birth" type="string" required>
+  Patient's date of birth in **ISO 8601** format (`YYYY-MM-DD`). Example:
+  `1985-03-14`.
+</ParamField>
+
+<ParamField body="gender" type="string" required>
+  Administrative gender. Must be one of: `male`, `female`, `other`, or
+  `unknown`. This field follows HL7 FHIR administrative gender semantics.
+</ParamField>
+
+<ParamField body="email" type="string">
+  Patient's primary email address. Used for patient portal invitations and
+  appointment notifications.
+</ParamField>
+
+<ParamField body="phone" type="string">
+  Patient's phone number. Accepts both **E.164** format (`+15558675309`) and
+  local formats (`555-867-5309`).
+</ParamField>
+
+<ParamField body="address" type="object">
+  Patient's primary mailing address.
+
+  <Expandable title="address fields">
+    <ParamField body="address.line1" type="string" required>
+      Street address line 1.
+    </ParamField>
+    <ParamField body="address.line2" type="string">
+      Apartment, suite, or unit number (optional).
+    </ParamField>
+    <ParamField body="address.city" type="string" required>
+      City name.
+    </ParamField>
+    <ParamField body="address.state" type="string" required>
+      Two-letter US state code (e.g., `TX`).
+    </ParamField>
+    <ParamField body="address.zip" type="string" required>
+      ZIP or postal code.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="external_id" type="string">
+  Your internal system's unique identifier for this patient (e.g.,
+  `EHR-PAT-9871`). The platform uses this field to detect duplicates — if a
+  patient with the same `external_id` already exists, the API returns
+  `409 Conflict`.
+</ParamField>
+
+<ParamField body="race" type="string">
+  Patient's race using an **HL7 race code** (e.g., `2106-3` for White). Refer
+  to the [HL7 Race & Ethnicity Code System](https://terminology.hl7.org) for
+  valid values.
+</ParamField>
+
+<ParamField body="ethnicity" type="string">
+  Patient's ethnicity using an **HL7 ethnicity code** (e.g., `2135-2` for
+  Hispanic or Latino).
+</ParamField>
+
+<ParamField body="preferred_language" type="string">
+  Patient's preferred spoken/written language as a **BCP 47** language tag
+  (e.g., `en`, `es`, `zh-Hans`).
+</ParamField>
+
+---
+
+## Example Request
+
+<CodeGroup>
+
+```bash cURL
+curl -X POST https://api.codecraftinghub.com/v1/patients \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "first_name": "Jane",
+    "last_name": "Smith",
+    "date_of_birth": "1985-03-14",
+    "gender": "female",
+    "email": "jane.smith@email.com",
+    "phone": "555-867-5309",
+    "address": {
+      "line1": "123 Main St",
+      "city": "Austin",
+      "state": "TX",
+      "zip": "78701"
+    },
+    "external_id": "EHR-PAT-9871"
+  }'
+```
+
+```python Python
+import requests
+
+url = "https://api.codecraftinghub.com/v1/patients"
+headers = {
+    "Authorization": "Bearer YOUR_API_KEY",
+    "Content-Type": "application/json",
+}
+payload = {
+    "first_name": "Jane",
+    "last_name": "Smith",
+    "date_of_birth": "1985-03-14",
+    "gender": "female",
+    "email": "jane.smith@email.com",
+    "phone": "555-867-5309",
+    "address": {
+        "line1": "123 Main St",
+        "city": "Austin",
+        "state": "TX",
+        "zip": "78701",
+    },
+    "external_id": "EHR-PAT-9871",
+}
+
+response = requests.post(url, json=payload, headers=headers)
+patient = response.json()
+print(patient["id"])  # pat_01HX9Z2K3M4N5P6Q7R8S9T0U
+```
+
+</CodeGroup>
+
+---
+
+## Response
+
+### 201 Created
+
+A successful request returns `201 Created` along with the newly created patient
+object. The platform assigns a unique `id` (prefixed `pat_`) and an
+auto-generated `mrn`.
+
+```json
+{
+  "id": "pat_01HX9Z2K3M4N5P6Q7R8S9T0U",
+  "mrn": "MRN-00042",
+  "first_name": "Jane",
+  "last_name": "Smith",
+  "date_of_birth": "1985-03-14",
+  "gender": "female",
+  "email": "jane.smith@email.com",
+  "phone": "555-867-5309",
+  "address": {
+    "line1": "123 Main St",
+    "city": "Austin",
+    "state": "TX",
+    "zip": "78701"
+  },
+  "external_id": "EHR-PAT-9871",
+  "status": "active",
+  "created_at": "2024-01-15T10:30:00Z",
+  "updated_at": "2024-01-15T10:30:00Z"
+}
+```
+
+<ResponseField name="id" type="string">
+  Platform-assigned unique patient identifier. Always prefixed with `pat_`.
+  Store this value — you'll use it to retrieve, update, and associate clinical
+  records with this patient.
+</ResponseField>
+
+<ResponseField name="mrn" type="string">
+  Auto-generated Medical Record Number (MRN) assigned by the platform.
+</ResponseField>
+
+<ResponseField name="first_name" type="string">
+  Patient's legal first name as submitted.
+</ResponseField>
+
+<ResponseField name="last_name" type="string">
+  Patient's legal last name as submitted.
+</ResponseField>
+
+<ResponseField name="date_of_birth" type="string">
+  Patient's date of birth in `YYYY-MM-DD` format.
+</ResponseField>
+
+<ResponseField name="gender" type="string">
+  Administrative gender as submitted.
+</ResponseField>
+
+<ResponseField name="email" type="string">
+  Patient's email address, if provided.
+</ResponseField>
+
+<ResponseField name="phone" type="string">
+  Patient's phone number, if provided.
+</ResponseField>
+
+<ResponseField name="address" type="object">
+  Patient's mailing address object, if provided.
+</ResponseField>
+
+<ResponseField name="external_id" type="string">
+  Your system's patient identifier, if provided.
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Patient record status. Newly created records are always `active`.
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 timestamp of when this record was created.
+</ResponseField>
+
+<ResponseField name="updated_at" type="string">
+  ISO 8601 timestamp of the most recent update to this record.
+</ResponseField>
+
+---
+
+### Error Responses
+
+| Status | Error Code          | Description                                                         |
+| ------ | ------------------- | ------------------------------------------------------------------- |
+| `409`  | `conflict`          | A patient with the same `external_id` already exists.               |
+| `422`  | `validation_error`  | One or more fields failed validation (see `details` in the body).   |
+| `403`  | `forbidden`         | Your API key does not have the required `read-write` or `admin` scope. |
+| `401`  | `unauthorized`      | Missing or invalid `Authorization` header.                          |
+
+<Warning>
+  If you receive a `409 Conflict`, use `GET /patients/search?external_id=YOUR_ID`
+  to locate the existing record rather than creating a duplicate patient.
+</Warning>
+
+<Tip>
+  Pass `race`, `ethnicity`, and `preferred_language` at creation time whenever
+  your source system provides them — retroactively populating these fields
+  improves quality measure reporting and care gap analysis across your patient
+  panel.
+</Tip>

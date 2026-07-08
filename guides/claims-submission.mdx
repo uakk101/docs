@@ -1,0 +1,406 @@
+---
+title: "Submitting and Managing Claims in CodeCrafting Hub"
+sidebarTitle: "Claims Submission"
+description: "Submit professional claims, poll for adjudication status, interpret denial codes, and resubmit corrected claims via the CodeCrafting Hub API."
+---
+
+Claims submission is the engine of your revenue cycle. CodeCrafting Hub translates a completed encounter directly into an EDI 837P-compliant professional claim, routes it to the payer, and gives you real-time status updates through a simple polling endpoint—so your billing team spends less time on clearinghouse portals and more time resolving exceptions.
+
+<Info>
+  CodeCrafting Hub submits claims over a direct payer connection or through a clearinghouse depending on the payer. Either way, the API surface you interact with is identical. Check the [Eligibility guide](/guides/eligibility-verification) for payer-specific submission SLAs.
+</Info>
+
+## Prerequisites
+
+Before you submit a claim, confirm all of the following:
+
+- The encounter `status` is `completed` (see the [Clinical Notes guide](/guides/clinical-notes))
+- The encounter has at least one ICD-10 diagnosis and one CPT procedure attached
+- The patient has an active primary insurance policy on file
+- You have verified eligibility for the service date (see the [Eligibility Verification guide](/guides/eligibility-verification))
+- You have the rendering provider NPI, billing provider NPI, and billing provider tax ID available
+
+<Warning>
+  Skipping eligibility verification before submission is the single most common cause of avoidable denials. Always run an eligibility check on or close to the date of service.
+</Warning>
+
+---
+
+## Step 1 — Confirm Prerequisites via the API
+
+Pull the encounter one final time to verify its status and confirm diagnoses and procedures are attached before you submit.
+
+<CodeGroup>
+
+```bash curl
+curl --request GET \
+  --url https://api.codecraftinghub.com/v1/encounters/enc_01HXA1B2C3D4E5F6G7H8I9J0K \
+  --header "Authorization: Bearer YOUR_API_KEY"
+```
+
+```python Python
+import requests
+
+encounter_id = "enc_01HXA1B2C3D4E5F6G7H8I9J0K"
+url = f"https://api.codecraftinghub.com/v1/encounters/{encounter_id}"
+headers = {"Authorization": "Bearer YOUR_API_KEY"}
+
+response = requests.get(url, headers=headers)
+response.raise_for_status()
+
+encounter = response.json()
+assert encounter["status"] == "completed", "Encounter must be completed before submission."
+assert encounter["diagnoses"], "At least one diagnosis is required."
+assert encounter["procedures"], "At least one procedure is required."
+print("Encounter is ready for claim submission.")
+```
+
+</CodeGroup>
+
+---
+
+## Step 2 — Verify Eligibility
+
+Run a real-time eligibility check to confirm the patient's coverage is still active on the service date. For full details, see the [Eligibility Verification guide](/guides/eligibility-verification).
+
+<CodeGroup>
+
+```bash curl
+curl --request POST \
+  --url https://api.codecraftinghub.com/v1/eligibility/check \
+  --header "Authorization: Bearer YOUR_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "patient_id": "pat_01HX9Z2K3M4N5P6Q7R8S9T0U",
+    "payer_id": "payer_bcbs_tx_001",
+    "service_date": "2024-01-15",
+    "provider_npi": "1234567890",
+    "service_type_code": "30"
+  }'
+```
+
+```python Python
+import requests
+
+url = "https://api.codecraftinghub.com/v1/eligibility/check"
+headers = {
+    "Authorization": "Bearer YOUR_API_KEY",
+    "Content-Type": "application/json",
+}
+payload = {
+    "patient_id": "pat_01HX9Z2K3M4N5P6Q7R8S9T0U",
+    "payer_id": "payer_bcbs_tx_001",
+    "service_date": "2024-01-15",
+    "provider_npi": "1234567890",
+    "service_type_code": "30",
+}
+
+response = requests.post(url, json=payload, headers=headers)
+response.raise_for_status()
+
+eligibility = response.json()
+if not eligibility["coverage_active"]:
+    raise ValueError("Patient coverage is inactive. Update insurance before submitting.")
+print("Coverage confirmed active.")
+```
+
+</CodeGroup>
+
+---
+
+## Step 3 — Submit the Claim
+
+Post to `/claims` with the encounter ID, payer ID, and provider identifiers. CodeCrafting Hub assembles the 837P transaction and routes it to the payer automatically.
+
+<CodeGroup>
+
+```bash curl
+curl --request POST \
+  --url https://api.codecraftinghub.com/v1/claims \
+  --header "Authorization: Bearer YOUR_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "encounter_id": "enc_01HXA1B2C3D4E5F6G7H8I9J0K",
+    "claim_type": "professional",
+    "payer_id": "payer_bcbs_tx_001",
+    "rendering_provider_npi": "1234567890",
+    "billing_provider_npi": "9876543210",
+    "billing_provider_tax_id": "12-3456789",
+    "service_facility_location_npi": "1122334455"
+  }'
+```
+
+```python Python
+import requests
+
+url = "https://api.codecraftinghub.com/v1/claims"
+headers = {
+    "Authorization": "Bearer YOUR_API_KEY",
+    "Content-Type": "application/json",
+}
+payload = {
+    "encounter_id": "enc_01HXA1B2C3D4E5F6G7H8I9J0K",
+    "claim_type": "professional",
+    "payer_id": "payer_bcbs_tx_001",
+    "rendering_provider_npi": "1234567890",
+    "billing_provider_npi": "9876543210",
+    "billing_provider_tax_id": "12-3456789",
+    "service_facility_location_npi": "1122334455",
+}
+
+response = requests.post(url, json=payload, headers=headers)
+response.raise_for_status()
+
+claim = response.json()
+claim_id = claim["id"]
+print(f"Claim submitted: {claim_id} — status: {claim['status']}")
+```
+
+</CodeGroup>
+
+**Example response (immediate):**
+
+```json
+{
+  "id": "clm_01HXB1C2D3E4F5G6H7I8J9K0L",
+  "encounter_id": "enc_01HXA1B2C3D4E5F6G7H8I9J0K",
+  "status": "submitted",
+  "claim_type": "professional",
+  "payer_id": "payer_bcbs_tx_001",
+  "submitted_at": "2024-01-15T12:00:00Z"
+}
+```
+
+The initial status is always `submitted`. Adjudication typically takes minutes to days depending on the payer. Poll the claim status endpoint to track progress.
+
+---
+
+## Step 4 — Poll for Claim Status
+
+Call `GET /claims/{id}` to check the current adjudication status. Implement exponential backoff—poll every 5 minutes for the first hour, then hourly until a terminal status is reached.
+
+<CodeGroup>
+
+```bash curl
+curl --request GET \
+  --url https://api.codecraftinghub.com/v1/claims/clm_01HXB1C2D3E4F5G6H7I8J9K0L \
+  --header "Authorization: Bearer YOUR_API_KEY"
+```
+
+```python Python
+import requests
+import time
+
+claim_id = "clm_01HXB1C2D3E4F5G6H7I8J9K0L"
+url = f"https://api.codecraftinghub.com/v1/claims/{claim_id}"
+headers = {"Authorization": "Bearer YOUR_API_KEY"}
+
+TERMINAL_STATUSES = {"accepted", "denied", "rejected", "paid"}
+interval = 300  # 5 minutes
+
+while True:
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()
+    claim = response.json()
+    status = claim["status"]
+    print(f"Claim {claim_id} status: {status}")
+
+    if status in TERMINAL_STATUSES:
+        break
+
+    time.sleep(interval)
+    interval = min(interval * 2, 3600)  # cap at 1 hour
+```
+
+</CodeGroup>
+
+### Accepted claim response
+
+```json
+{
+  "id": "clm_01HXB1C2D3E4F5G6H7I8J9K0L",
+  "status": "accepted",
+  "payer_claim_number": "BCB-2024-0115-001",
+  "accepted_at": "2024-01-15T18:30:00Z",
+  "estimated_payment_date": "2024-01-29",
+  "allowed_amount": 135.00
+}
+```
+
+### Denied claim response
+
+```json
+{
+  "id": "clm_01HXB1C2D3E4F5G6H7I8J9K0L",
+  "status": "denied",
+  "denial_code": "CO-4",
+  "denial_reason": "The procedure code is inconsistent with the modifier",
+  "appeal_deadline": "2024-04-15"
+}
+```
+
+<Note>
+  **Accepted** means the payer has agreed to process the claim and will pay the `allowed_amount`. **Denied** means the payer reviewed the claim and will not pay it in its current form—but you can appeal or correct and resubmit before the `appeal_deadline`.
+</Note>
+
+---
+
+## Step 5 — Handle Accepted vs. Denied Claims
+
+<Tabs>
+  <Tab title="Accepted">
+    An accepted claim requires no further action from your billing team until the Explanation of Benefits (EOB) arrives. At that point:
+
+    1. Post the payment against the patient account.
+    2. Apply the `allowed_amount` to the patient's deductible and copay balance.
+    3. Send the patient a statement for any remaining patient responsibility.
+
+    <Tip>
+      Subscribe to the `claim.paid` webhook event to receive automatic notification when the remittance advice (835 transaction) posts, instead of polling indefinitely.
+    </Tip>
+  </Tab>
+  <Tab title="Rejected">
+    A **rejected** claim failed clearinghouse or front-end payer edits before adjudication—it was never reviewed by a claims examiner. Common causes include invalid NPI format, missing required fields, or duplicate claim submission.
+
+    Fix the underlying data error and resubmit as a **new** claim (do not use the corrected claim workflow for rejections).
+
+    ```python Python
+    # After fixing the encounter, resubmit as a new claim
+    response = requests.post(
+        "https://api.codecraftinghub.com/v1/claims",
+        json={
+            "encounter_id": "enc_01HXA1B2C3D4E5F6G7H8I9J0K",
+            "claim_type": "professional",
+            "payer_id": "payer_bcbs_tx_001",
+            "rendering_provider_npi": "1234567890",
+            "billing_provider_npi": "9876543210",
+            "billing_provider_tax_id": "12-3456789",
+            "service_facility_location_npi": "1122334455",
+        },
+        headers={"Authorization": "Bearer YOUR_API_KEY", "Content-Type": "application/json"},
+    )
+    ```
+  </Tab>
+  <Tab title="Denied">
+    A **denied** claim completed payer adjudication but was not approved for payment. You have three options:
+
+    1. **Correct and resubmit** — Fix the coding error and post a corrected claim (`"claim_frequency_code": "7"`).
+    2. **Appeal** — Submit a written appeal with supporting documentation before the `appeal_deadline`.
+    3. **Write off** — If the denial is valid, write off the balance and update the patient account.
+
+    Always note the `appeal_deadline` from the denial response—missing it forfeits your right to appeal.
+  </Tab>
+</Tabs>
+
+---
+
+## Step 6 — Resubmit After Corrections
+
+To submit a corrected claim, use claim frequency code `7` and reference the original payer claim number.
+
+<CodeGroup>
+
+```bash curl
+curl --request POST \
+  --url https://api.codecraftinghub.com/v1/claims \
+  --header "Authorization: Bearer YOUR_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "encounter_id": "enc_01HXA1B2C3D4E5F6G7H8I9J0K",
+    "claim_type": "professional",
+    "payer_id": "payer_bcbs_tx_001",
+    "rendering_provider_npi": "1234567890",
+    "billing_provider_npi": "9876543210",
+    "billing_provider_tax_id": "12-3456789",
+    "service_facility_location_npi": "1122334455",
+    "claim_frequency_code": "7",
+    "original_claim_id": "clm_01HXB1C2D3E4F5G6H7I8J9K0L"
+  }'
+```
+
+```python Python
+import requests
+
+url = "https://api.codecraftinghub.com/v1/claims"
+headers = {
+    "Authorization": "Bearer YOUR_API_KEY",
+    "Content-Type": "application/json",
+}
+payload = {
+    "encounter_id": "enc_01HXA1B2C3D4E5F6G7H8I9J0K",
+    "claim_type": "professional",
+    "payer_id": "payer_bcbs_tx_001",
+    "rendering_provider_npi": "1234567890",
+    "billing_provider_npi": "9876543210",
+    "billing_provider_tax_id": "12-3456789",
+    "service_facility_location_npi": "1122334455",
+    "claim_frequency_code": "7",                              # corrected claim
+    "original_claim_id": "clm_01HXB1C2D3E4F5G6H7I8J9K0L",  # original claim ID
+}
+
+response = requests.post(url, json=payload, headers=headers)
+response.raise_for_status()
+corrected_claim = response.json()
+print(f"Corrected claim submitted: {corrected_claim['id']}")
+```
+
+</CodeGroup>
+
+---
+
+## Common Denial Codes and Resolutions
+
+Understanding payer denial codes lets you resolve and resubmit claims quickly. The table below covers the five most frequent denial codes.
+
+| Code | Description | Root Cause | Resolution |
+|---|---|---|---|
+| **CO-4** | The procedure code is inconsistent with the modifier | A modifier attached to the CPT code contradicts the procedure (e.g., bilateral modifier on a unilateral-only code) | Remove or correct the modifier; verify CPT–modifier compatibility in the CMS manual |
+| **CO-11** | The diagnosis is inconsistent with the procedure | The ICD-10 code does not support medical necessity for the billed CPT | Review LCD/NCD policies; select a diagnosis code that clinically supports the procedure |
+| **CO-16** | Claim/service lacks information or has submission/billing errors | One or more required fields are missing or invalid (NPI, date of service, place of service) | Review the `denial_reason` detail field; correct the missing data and resubmit as a corrected claim |
+| **CO-97** | The benefit for this service is included in the payment for another service | A procedure was billed separately but is bundled into another code per NCCI edits | Check the NCCI edit table; remove the bundled code or add modifier 59/XU if a distinct procedure applies |
+| **PR-1** | Deductible amount | The patient's deductible has not been met; patient owes the full allowed amount | Bill the patient for the deductible amount; no resubmission to the payer needed |
+
+<Note>
+  **CO** (Contractual Obligation) denials indicate the provider is contractually responsible for the adjustment and cannot bill the patient for the difference. **PR** (Patient Responsibility) denials indicate the balance transfers to the patient.
+</Note>
+
+---
+
+## Complete Claims Submission Flow
+
+<Steps>
+  <Step title="Confirm a completed encounter">
+    Verify the encounter has `status: completed` with at least one ICD-10 diagnosis and one CPT procedure attached.
+  </Step>
+  <Step title="Verify eligibility">
+    Run `POST /eligibility/check` to confirm active coverage on the service date.
+  </Step>
+  <Step title="POST /claims">
+    Submit the claim with the encounter ID, payer ID, and all required provider NPIs and tax ID.
+  </Step>
+  <Step title="Poll GET /claims/{id}">
+    Check status periodically with exponential backoff until a terminal status (`accepted`, `denied`, `paid`, `rejected`) is reached.
+  </Step>
+  <Step title="Handle the result">
+    For accepted claims, post the remittance. For denied claims, review the denial code, correct the encounter data, and resubmit using frequency code `7`.
+  </Step>
+</Steps>
+
+---
+
+## What's Next
+
+<CardGroup cols={2}>
+  <Card title="Eligibility Verification" icon="shield-check" href="/guides/eligibility-verification">
+    Learn to interpret eligibility responses and handle inactive coverage before it causes a denial.
+  </Card>
+  <Card title="Clinical Notes" icon="notes-medical" href="/guides/clinical-notes">
+    Ensure your encounter has the diagnoses and procedures needed for clean claims.
+  </Card>
+  <Card title="Patient Registration" icon="user-plus" href="/guides/patient-registration">
+    Register patients and attach insurance policies before the first visit.
+  </Card>
+  <Card title="Claims API Reference" icon="code" href="/api-reference/claims/submit">
+    Full schema reference for all claims endpoints and status codes.
+  </Card>
+</CardGroup>

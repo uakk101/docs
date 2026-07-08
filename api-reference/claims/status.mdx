@@ -1,0 +1,113 @@
+---
+title: "GET /claims/{id} — Retrieve Claim Status and Details"
+sidebarTitle: "GET /claims/{id}"
+description: "Retrieve the current status, payer adjudication details, allowed amounts, and full payment breakdown for a submitted insurance claim."
+---
+
+After you submit a claim, you can check its adjudication status and payment details at any time by passing its platform identifier to this endpoint. The response reflects the most recent payer update received, including allowed amounts, paid amounts, and patient responsibility figures once the claim has been adjudicated. You need at minimum the `read` scope to call this endpoint.
+
+## Claim Status Values
+
+Claims move through the following statuses during their lifecycle:
+
+| Status | Description |
+|---|---|
+| `submitted` | Claim has been transmitted to the payer. |
+| `accepted` | Payer has acknowledged receipt and is processing. |
+| `rejected` | Payer rejected the claim before adjudication (fixable). |
+| `denied` | Payer adjudicated and denied payment. |
+| `paid` | Payer has remitted payment. |
+| `appealed` | A formal appeal has been filed against a denial. |
+| `closed` | Claim is finalized with no further action expected. |
+
+<Note>
+  `rejected` indicates a front-end edit failure (e.g., missing NPI) that you can correct and resubmit. `denied` means the claim was processed but payment was refused—this typically requires an appeal or corrected claim.
+</Note>
+
+## Request
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token for API authentication. Format: `Bearer YOUR_API_KEY`.
+</ParamField>
+
+<ParamField path="id" type="string" required>
+  The platform identifier of the claim to retrieve. Prefix: `clm_`.
+</ParamField>
+
+<CodeGroup>
+```bash cURL
+curl https://api.codecraftinghub.com/v1/claims/clm_01HXB1C2D3E4F5G6H7I8J9K0L \
+  -H 'Authorization: Bearer YOUR_API_KEY'
+```
+
+```python Python
+import httpx
+
+claim_id = "clm_01HXB1C2D3E4F5G6H7I8J9K0L"
+
+response = httpx.get(
+    f"https://api.codecraftinghub.com/v1/claims/{claim_id}",
+    headers={"Authorization": "Bearer YOUR_API_KEY"},
+)
+claim = response.json()
+print(claim["status"])
+```
+</CodeGroup>
+
+## Response
+
+A successful request returns HTTP **200 OK** with the claim object. Financial fields such as `allowed_amount`, `paid_amount`, and `patient_responsibility` are only populated after payer adjudication.
+
+<ResponseField name="id" type="string">
+  Platform-generated claim identifier. Prefix: `clm_`.
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Current claim status (see status table above).
+</ResponseField>
+
+<ResponseField name="payer_claim_number" type="string">
+  The payer's own reference number for the claim, assigned after acceptance.
+</ResponseField>
+
+<ResponseField name="total_charge" type="number">
+  Total billed charge in USD as submitted.
+</ResponseField>
+
+<ResponseField name="allowed_amount" type="number">
+  Amount the payer allows based on the fee schedule. Populated after adjudication.
+</ResponseField>
+
+<ResponseField name="paid_amount" type="number">
+  Amount the payer remitted after applying deductibles, copays, and adjustments.
+</ResponseField>
+
+<ResponseField name="patient_responsibility" type="number">
+  The portion of the allowed amount the patient owes (deductible + copay + coinsurance).
+</ResponseField>
+
+<ResponseField name="paid_at" type="string">
+  ISO 8601 timestamp of when payment was remitted by the payer.
+</ResponseField>
+
+<ResponseField name="remittance_id" type="string">
+  Platform identifier of the Electronic Remittance Advice (ERA) linked to this payment. Prefix: `era_`.
+</ResponseField>
+
+```json 200 OK — Paid Claim
+{
+  "id": "clm_01HXB1C2D3E4F5G6H7I8J9K0L",
+  "status": "paid",
+  "payer_claim_number": "BCB-2024-0115-001",
+  "total_charge": 150.00,
+  "allowed_amount": 135.00,
+  "paid_amount": 105.00,
+  "patient_responsibility": 30.00,
+  "paid_at": "2024-01-29T00:00:00Z",
+  "remittance_id": "era_01HXG1H2I3J4K5L6M7N8O9P0Q"
+}
+```
+
+<Tip>
+  When a claim reaches `denied` status, inspect the `denial_reason_codes` array in the full claim object for X12 claim adjustment reason codes (CARCs) that explain why the payer denied the claim. These codes guide whether to correct and resubmit or file a formal appeal.
+</Tip>

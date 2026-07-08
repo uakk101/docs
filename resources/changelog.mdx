@@ -1,0 +1,122 @@
+---
+title: "API Changelog — CodeCrafting Hub Version History"
+sidebarTitle: "Changelog"
+description: "Track every new feature, enhancement, and deprecation across all CodeCrafting Hub API versions, from v1.0.0 to the latest release."
+---
+
+This changelog documents every released version of the CodeCrafting Hub API. Each entry lists new endpoints, changed behavior, and deprecations in the order they shipped. Review this page before upgrading your integration to catch any breaking changes or newly available features that may affect your workflows.
+
+<Note>
+  CodeCrafting Hub follows semantic versioning. Minor versions (e.g., v1.3.0 → v1.4.0) add new functionality in a backward-compatible way. Deprecated fields are supported for a minimum of two minor versions before removal.
+</Note>
+
+---
+
+## v1.4.0 — January 2024
+
+This release focuses on high-volume eligibility workflows, ERA processing events, and improved claim submission accuracy.
+
+### New Features
+
+<CardGroup cols={2}>
+  <Card title="Bulk Eligibility" icon="users">
+    Use `POST /eligibility/bulk` to verify insurance eligibility for up to **100 patients in a single request**. The endpoint returns a batch response with per-patient results and failures without failing the entire batch.
+  </Card>
+  <Card title="payment.posted Webhook" icon="webhook">
+    A new `payment.posted` webhook event fires when an ERA (Electronic Remittance Advice) is processed and a payment is posted to a claim. Subscribe to this event for real-time payment reconciliation workflows.
+  </Card>
+</CardGroup>
+
+### Enhancements
+
+- **New claim field:** `coordination_of_benefits` — attach secondary insurance claim details directly on the claim object for COB submissions without a separate API call.
+- **Improved validation messages:** Diagnosis code validation (ICD-10-CM) now returns specific error messages indicating whether the code is invalid, inactive for the service date, or missing a required 7th character extension.
+
+---
+
+## v1.3.0 — November 2023
+
+This release adds FHIR bulk export, expands webhook coverage for scheduling, and improves patient search flexibility.
+
+### New Features
+
+<CardGroup cols={2}>
+  <Card title="FHIR R4 Bulk Export" icon="file-export">
+    `GET /fhir/r4/$export` triggers an asynchronous export of all FHIR resources for your organization in NDJSON format. Poll the returned status URL to track progress and retrieve download links.
+  </Card>
+  <Card title="Appointment Reminder Webhooks" icon="bell">
+    A new `appointment.reminder_sent` webhook event fires each time an automated patient reminder is dispatched. Use this to log reminder activity or trigger follow-up workflows in your own system.
+  </Card>
+</CardGroup>
+
+### Enhancements
+
+- **New patient search filters:** `GET /patients` now accepts `insurance_id` and `payer_id` as query parameters, making it possible to retrieve all patients associated with a specific insurance plan or payer.
+
+### Deprecations
+
+<Warning>
+  The `patient.gender_identity` field has been **renamed to `patient.gender`** to align with FHIR R4 and US Core naming conventions. The old field name continues to work through v1.5.0, after which it will be removed. Update your integration to use `patient.gender` as soon as possible.
+</Warning>
+
+---
+
+## v1.2.0 — September 2023
+
+This release introduces payments and remittance processing, dramatically expands payer coverage for real-time eligibility, and adds rate limit visibility headers to all API responses.
+
+### New Features
+
+<CardGroup cols={2}>
+  <Card title="ERA / Remittance Processing" icon="receipt">
+    Use `POST /payments` to submit and process Electronic Remittance Advice (ERA) files. The endpoint parses 835 transactions, matches payments to claims, and posts adjustments automatically.
+  </Card>
+  <Card title="Rate Limit Headers" icon="gauge">
+    All API responses now include `X-RateLimit-Limit` and `X-RateLimit-Remaining` headers so your integration can monitor usage and throttle proactively before hitting the limit.
+  </Card>
+</CardGroup>
+
+### Enhancements
+
+- **Expanded payer network:** Real-time eligibility verification now supports **900+ payers**, up from 650 in v1.1.0. See the payer directory in the dashboard for the full list.
+- **Clinical notes format:** Clinical notes on encounters now accept free-text narrative content in addition to structured SOAP (Subjective, Objective, Assessment, Plan) format. Use the `format` field to specify `soap` or `freetext`.
+
+---
+
+## v1.1.0 — July 2023
+
+This release introduces the scheduling API and strengthens security for webhook integrations.
+
+### New Features
+
+<CardGroup cols={2}>
+  <Card title="Scheduling API" icon="calendar">
+    Create, list, and cancel appointments using the new `/appointments` endpoints. Appointments link to patients, providers, and encounter types and support duration, location, and notes fields.
+  </Card>
+  <Card title="Webhook Signature Verification" icon="shield-check">
+    All webhook deliveries now include the `X-CCHub-Signature` header containing an HMAC-SHA256 signature of the payload. Verify this header in your endpoint handler to authenticate incoming events.
+  </Card>
+</CardGroup>
+
+### Enhancements
+
+- **Provider NPI validation:** Encounter creation now validates the `provider_npi` field against the NPPES registry at submission time. Invalid or inactive NPIs return a `422 validation_error` immediately rather than failing downstream during claim submission.
+
+---
+
+## v1.0.0 — May 2023
+
+Initial public release of the CodeCrafting Hub API.
+
+### Available at Launch
+
+| Resource | Endpoints |
+|---|---|
+| Patients | Create, retrieve, update, list, search |
+| Encounters | Create, retrieve, update, complete |
+| Claims | Create, submit, retrieve, list |
+| Eligibility | Real-time eligibility verification (270/271) |
+
+<Tip>
+  If you are building a new integration today, start directly with the latest version. All v1.x versions share the same base URL and authentication model — newer features are purely additive.
+</Tip>

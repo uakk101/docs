@@ -1,0 +1,130 @@
+---
+title: "HIPAA Compliance & Data Security Overview"
+sidebarTitle: "HIPAA"
+description: "Understand how CodeCrafting Hub safeguards PHI with HIPAA-compliant infrastructure, encryption, access controls, and BAA agreements."
+---
+
+CodeCrafting Hub is built from the ground up to meet the requirements of the Health Insurance Portability and Accountability Act (HIPAA). Every layer of the platform — from network transport to database storage to access logging — is designed to protect Protected Health Information (PHI) and support your obligations as a Covered Entity or Business Associate.
+
+<Warning>
+  You must sign a **Business Associate Agreement (BAA)** with CodeCrafting Hub before using the platform with real patient data. Using the production API with PHI before a BAA is in place violates HIPAA and your Terms of Service.
+</Warning>
+
+## Business Associate Agreement (BAA)
+
+A BAA is a legally required contract between your organization and CodeCrafting Hub that defines each party's responsibilities for safeguarding PHI. You must execute a BAA before transmitting, storing, or processing any real patient data through the API.
+
+<Steps>
+  <Step title="Request your BAA">
+    You can request a BAA in one of two ways:
+    - **Dashboard:** Navigate to **Settings → Compliance → Business Associate Agreement** and click **Request BAA**.
+    - **Email:** Send a request to [compliance@codecraftinghub.com](mailto:compliance@codecraftinghub.com) from your organization's primary contact email.
+  </Step>
+  <Step title="Review and sign">
+    CodeCrafting Hub sends the BAA via DocuSign within one business day. Review it with your legal or compliance team before signing.
+  </Step>
+  <Step title="Confirm activation">
+    Once both parties have signed, your account is marked BAA-active in the dashboard. You may then use the production environment with real PHI.
+  </Step>
+</Steps>
+
+<Tip>
+  Enterprise customers can negotiate a custom BAA. Reach out to your account manager if your organization requires modified terms.
+</Tip>
+
+## What Counts as PHI
+
+Under HIPAA, **Protected Health Information (PHI)** is any health information that can be linked to a specific individual. On the CodeCrafting Hub platform, PHI includes — but is not limited to:
+
+- Patient names, addresses, dates of birth, and contact details
+- Medical record numbers (MRNs) and account numbers
+- Diagnosis codes, procedure codes, and clinical notes
+- Insurance member IDs and claim data
+- Encounter dates and provider assignment
+
+CodeCrafting Hub stores and processes all of the above on your behalf. Your BAA governs how this data is handled.
+
+## Data Encryption
+
+CodeCrafting Hub encrypts all data both in transit and at rest.
+
+<CardGroup cols={2}>
+  <Card title="In Transit" icon="lock">
+    All API traffic is encrypted using **TLS 1.2 or higher**. Connections using older protocols are rejected. Certificate pinning is available for mobile integrations — contact support for details.
+  </Card>
+  <Card title="At Rest" icon="database">
+    All data stored in CodeCrafting Hub databases and object storage is encrypted using **AES-256**. Encryption keys are managed via AWS Key Management Service (KMS) with automatic annual rotation.
+  </Card>
+</CardGroup>
+
+## Access Controls
+
+CodeCrafting Hub enforces strict access controls at every level of the platform.
+
+### Role-Based Access
+
+API keys are scoped to specific roles and resource permissions. You can create keys with read-only access, write access, or restricted access to individual resource types (e.g., claims only, no patient demographics). Manage API key scopes from **Settings → API Keys** in the dashboard.
+
+### Audit Logs
+
+Every read, write, and delete operation that touches PHI is recorded in an immutable audit log. Audit log entries include:
+
+| Field | Description |
+|---|---|
+| `timestamp` | ISO 8601 UTC time of the action |
+| `actor` | API key ID or user ID that performed the action |
+| `action` | Operation type (read, create, update, delete) |
+| `resource_type` | The type of resource accessed |
+| `resource_id` | The specific record ID |
+| `ip_address` | Originating IP address |
+
+Export audit logs from the dashboard or via the `GET /audit-logs` endpoint for your own SIEM or compliance reporting pipeline.
+
+## Data Residency
+
+All CodeCrafting Hub production data — including PHI — is stored exclusively on **US-based AWS infrastructure** (us-east-1 and us-west-2 regions). Data never leaves the United States.
+
+<Info>
+  If your organization has state-specific data residency requirements (e.g., California, Texas), contact [compliance@codecraftinghub.com](mailto:compliance@codecraftinghub.com) to discuss single-region configurations.
+</Info>
+
+## Breach Notification
+
+In the event of a security incident involving your PHI, CodeCrafting Hub will notify you within **60 days** of discovery, as required by the HIPAA Breach Notification Rule. The notification will include:
+
+- A description of the nature of the breach
+- The types of PHI involved
+- Steps taken to mitigate the breach
+- Recommended actions for your organization
+
+CodeCrafting Hub maintains a dedicated incident response team available 24/7. You can also report a suspected breach directly to [security@codecraftinghub.com](mailto:security@codecraftinghub.com).
+
+## Sandbox Environment
+
+CodeCrafting Hub provides a fully isolated **sandbox environment** for development and testing. The sandbox mirrors the production API but uses synthetic data only.
+
+<Warning>
+  Never use real patient data in the sandbox. The sandbox environment is not covered by your BAA, is not HIPAA-compliant infrastructure, and does not have the same security controls as production. Use only synthetic or fictional patient records during testing.
+</Warning>
+
+The sandbox base URL is `https://sandbox.api.codecraftinghub.com/v1`. Sandbox API keys are separate from production keys and are issued from the **Settings → API Keys → Sandbox** panel in the dashboard.
+
+## Patient Rights
+
+HIPAA grants patients specific rights over their health information. CodeCrafting Hub provides API endpoints to help you respond to patient rights requests in a timely and compliant way.
+
+| Patient Right | How to Fulfill It |
+|---|---|
+| **Right of Access** | Use `GET /patients/{id}` and `GET /encounters?patient_id={id}` to export a patient's full record |
+| **Right to Amend** | Use `PATCH /patients/{id}` or `PATCH /encounters/{id}` to update or annotate records |
+| **Right to Restrict** | Use `PATCH /patients/{id}` with the `restrictions` field to flag disclosure restrictions |
+
+<Note>
+  You are the Covered Entity responsible for responding to patient rights requests within the HIPAA-mandated timeframes (30 days for access requests, with one 30-day extension). CodeCrafting Hub's API provides the tools — your workflows and policies govern the process.
+</Note>
+
+## SOC 2 Type II Certification
+
+In addition to HIPAA compliance, CodeCrafting Hub holds a **SOC 2 Type II certification**, independently verified by a third-party auditor. The certification covers the Trust Service Criteria for security, availability, and confidentiality.
+
+Request a copy of the latest SOC 2 report by emailing [compliance@codecraftinghub.com](mailto:compliance@codecraftinghub.com). Reports are shared under NDA.

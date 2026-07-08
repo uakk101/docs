@@ -1,20 +1,68 @@
 ---
-title: "Introduction"
-description: "Welcome to your project"
+title: "CodeCrafting Hub EHR & RCM API Documentation"
+sidebarTitle: "Home"
+description: "Integrate electronic health records and revenue cycle management into your healthcare application with the CodeCrafting Hub API."
 ---
 
-Write a short description of your product here. What it does, who it's for, and what they can accomplish with it.
+CodeCrafting Hub gives healthcare organizations a single, HIPAA-compliant API to manage patients, clinical encounters, insurance billing, and claims—from first appointment to final payment. Whether you're building a practice management system, connecting a specialty workflow, or automating your revenue cycle, this documentation covers everything you need to get started.
 
-<Tip>
-  Ready to make this your own? Start by editing this page. Update your `docs.json` file to customize your site. Then fill out the [Quickstart](/quickstart) page.
-</Tip>
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Make your first API call in minutes and see real patient data flowing end-to-end.
+  </Card>
+  <Card title="Authentication" icon="lock" href="/authentication">
+    Learn how to obtain and use API keys to authenticate every request securely.
+  </Card>
+  <Card title="API Reference" icon="code" href="/api-reference/overview">
+    Full endpoint documentation for patients, encounters, claims, and scheduling.
+  </Card>
+  <Card title="Guides" icon="book-open" href="/guides/patient-registration">
+    Step-by-step walkthroughs for the most common EHR and RCM workflows.
+  </Card>
+</CardGroup>
 
-<Card title="Quickstart" icon="rocket" href="/quickstart">
-  This card links to the quickstart page in your project.
-</Card>
-<Card title="Components" icon="puzzle-piece" href="https://mintlify.com/docs/components">
-  Add cards, callouts, steps, tabs, and more to design and structure your pages.
-</Card>
-<Card title="Settings" icon="gear" href="https://mintlify.com/docs/organize/settings">
-  Set your site name, branding, and navigation in the `docs.json` file.
-</Card>
+## What you can build
+
+CodeCrafting Hub covers the full care-to-cash lifecycle for healthcare providers.
+
+<CardGroup cols={3}>
+  <Card title="Patient Management" icon="user-injured">
+    Register patients, store demographics, and search records by MRN, name, or date of birth.
+  </Card>
+  <Card title="Clinical Encounters" icon="stethoscope">
+    Document SOAP notes, attach ICD-10 diagnoses, and manage the full encounter workflow.
+  </Card>
+  <Card title="Eligibility Verification" icon="shield-check">
+    Check insurance eligibility in real time before every visit to reduce claim denials.
+  </Card>
+  <Card title="Claims & Billing" icon="file-invoice-dollar">
+    Submit professional (837P) and institutional (837I) claims and track status automatically.
+  </Card>
+  <Card title="Remittance Posting" icon="money-bill-transfer">
+    Process ERA/EOB files and post payments directly to patient accounts.
+  </Card>
+  <Card title="Scheduling" icon="calendar-check">
+    Create, list, and cancel appointments tied to providers, locations, and patients.
+  </Card>
+</CardGroup>
+
+## Get started in four steps
+
+<Steps>
+  <Step title="Request API access">
+    Sign up at the [CodeCrafting Hub dashboard](https://app.codecraftinghub.com/signup) and request API credentials for your organization.
+  </Step>
+  <Step title="Authenticate your requests">
+    Add your API key to the `Authorization` header on every request. See [Authentication](/authentication) for details.
+  </Step>
+  <Step title="Register your first patient">
+    Use `POST /patients` to create a patient record. Follow the [Patient Registration guide](/guides/patient-registration) for a full walkthrough.
+  </Step>
+  <Step title="Submit a claim">
+    Create an encounter, attach diagnoses and procedures, verify eligibility, then submit via `POST /claims`. The [Claims Submission guide](/guides/claims-submission) walks you through each step.
+  </Step>
+</Steps>
+
+<Note>
+  All data exchanged with the CodeCrafting Hub API is encrypted in transit (TLS 1.2+) and at rest. The platform is fully HIPAA-compliant. See the [HIPAA & Compliance](/resources/hipaa) page for details on our BAA process.
+</Note>

@@ -1,0 +1,173 @@
+---
+title: "POST /eligibility/check — Verify Insurance Eligibility"
+sidebarTitle: "POST /eligibility/check"
+description: "Run a real-time eligibility check against a payer to confirm active coverage, deductibles, copays, and patient cost-sharing before a visit."
+---
+
+Before rendering services, you verify a patient's insurance eligibility in real time so you know their coverage is active, what their deductible balance is, and how much they owe at the point of care. This endpoint transmits an X12 270 eligibility inquiry to the payer and returns a structured 271 response with coverage details—all without leaving the API. You need at minimum the `read-write` scope, and this endpoint is rate-limited to **100 requests per minute** per API key.
+
+## Request
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token for API authentication. Format: `Bearer YOUR_API_KEY`.
+</ParamField>
+
+<ParamField body="patient_id" type="string" required>
+  The platform identifier for the patient. Prefix: `pat_`.
+</ParamField>
+
+<ParamField body="payer_id" type="string" required>
+  The payer to check eligibility with (e.g., `payer_bcbs_tx_001`).
+</ParamField>
+
+<ParamField body="service_date" type="string" required>
+  The date for which eligibility should be verified, in `YYYY-MM-DD` format. Use the anticipated date of service.
+</ParamField>
+
+<ParamField body="provider_npi" type="string" required>
+  The 10-digit NPI of the provider requesting the eligibility check.
+</ParamField>
+
+<ParamField body="service_type_code" type="string" default='"30"'>
+  X12 service type code specifying the benefit category to check. Defaults to `"30"` (Health Benefit Plan Coverage). Common values include `"1"` (Medical Care) and `"48"` (Hospital, Inpatient).
+</ParamField>
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://api.codecraftinghub.com/v1/eligibility/check \
+  -H 'Authorization: Bearer YOUR_API_KEY' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "patient_id": "pat_01HX9Z2K3M4N5P6Q7R8S9T0U",
+    "payer_id": "payer_bcbs_tx_001",
+    "service_date": "2024-01-15",
+    "provider_npi": "1234567890"
+  }'
+```
+
+```python Python
+import httpx
+
+payload = {
+    "patient_id": "pat_01HX9Z2K3M4N5P6Q7R8S9T0U",
+    "payer_id": "payer_bcbs_tx_001",
+    "service_date": "2024-01-15",
+    "provider_npi": "1234567890",
+}
+
+response = httpx.post(
+    "https://api.codecraftinghub.com/v1/eligibility/check",
+    headers={"Authorization": "Bearer YOUR_API_KEY"},
+    json=payload,
+)
+eligibility = response.json()
+
+if eligibility["coverage_active"]:
+    print(f"Deductible remaining: ${eligibility['deductible']['remaining']}")
+```
+</CodeGroup>
+
+<Warning>
+  This endpoint is rate-limited to **100 requests per minute**. Exceeding this limit returns `429 Too Many Requests` with a `Retry-After` header indicating when you can retry. Cache eligibility results for the same patient/payer/date combination rather than re-querying within the same day.
+</Warning>
+
+<Note>
+  Eligibility checks reflect real-time data from the payer at the moment of the request. Coverage details can change between the time of checking and the actual date of service. Always re-verify eligibility on the date of service for high-cost procedures.
+</Note>
+
+## Response
+
+A successful request returns HTTP **200 OK** with the eligibility result.
+
+<ResponseField name="id" type="string">
+  Platform-generated eligibility check identifier. Prefix: `elig_`.
+</ResponseField>
+
+<ResponseField name="coverage_active" type="boolean">
+  `true` if the patient has active coverage with this payer on the requested service date.
+</ResponseField>
+
+<ResponseField name="plan_name" type="string">
+  Name of the patient's insurance plan (e.g., `Blue Cross PPO Gold`).
+</ResponseField>
+
+<ResponseField name="member_id" type="string">
+  Patient's member ID with the payer.
+</ResponseField>
+
+<ResponseField name="deductible" type="object">
+  Individual deductible details for the current benefit period.
+
+  <Expandable title="deductible fields">
+    <ResponseField name="individual" type="number">
+      Total individual deductible amount in USD.
+    </ResponseField>
+    <ResponseField name="met" type="number">
+      Amount of the deductible the patient has already met.
+    </ResponseField>
+    <ResponseField name="remaining" type="number">
+      Remaining deductible balance the patient must satisfy.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="copay" type="object">
+  Copay amounts for common visit types.
+
+  <Expandable title="copay fields">
+    <ResponseField name="primary_care" type="number">
+      Copay for primary care visits in USD.
+    </ResponseField>
+    <ResponseField name="specialist" type="number">
+      Copay for specialist visits in USD.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="out_of_pocket_max" type="object">
+  Individual out-of-pocket maximum details for the current benefit period.
+
+  <Expandable title="out_of_pocket_max fields">
+    <ResponseField name="individual" type="number">
+      Total individual out-of-pocket maximum in USD.
+    </ResponseField>
+    <ResponseField name="met" type="number">
+      Amount the patient has already accumulated toward the maximum.
+    </ResponseField>
+    <ResponseField name="remaining" type="number">
+      Remaining amount before the patient reaches the out-of-pocket maximum.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="checked_at" type="string">
+  ISO 8601 timestamp of when the eligibility check was performed.
+</ResponseField>
+
+```json 200 OK
+{
+  "id": "elig_01HXC1D2E3F4G5H6I7J8K9L0M",
+  "coverage_active": true,
+  "plan_name": "Blue Cross PPO Gold",
+  "member_id": "BCB123456789",
+  "deductible": {
+    "individual": 1500.00,
+    "met": 450.00,
+    "remaining": 1050.00
+  },
+  "copay": {
+    "primary_care": 30.00,
+    "specialist": 50.00
+  },
+  "out_of_pocket_max": {
+    "individual": 5000.00,
+    "met": 450.00,
+    "remaining": 4550.00
+  },
+  "checked_at": "2024-01-15T08:00:00Z"
+}
+```
+
+<Tip>
+  Use the `deductible.remaining` and `copay` values to display an accurate cost estimate to the patient at check-in, reducing surprise billing complaints and improving front-desk collections.
+</Tip>

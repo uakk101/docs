@@ -1,0 +1,455 @@
+---
+title: "Documenting Clinical Notes for an Encounter"
+sidebarTitle: "Clinical Notes"
+description: "Add SOAP notes, attach ICD-10 diagnoses and CPT procedures, and mark an encounter complete using the CodeCrafting Hub API."
+---
+
+Clinical documentation sits at the intersection of patient care and revenue cycle management. CodeCrafting Hub ties every note, diagnosis, and procedure directly to an encounter record so that your clinical data and billing data stay in sync—eliminating the manual re-entry that causes coding errors and claim denials.
+
+<Info>
+  All encounter and note data is stored in a HIPAA-compliant, FHIR R4-conformant format. Notes are immutable once the encounter status is set to `completed`; use an amendment workflow for any post-completion corrections.
+</Info>
+
+## Prerequisites
+
+Before you start documenting, make sure you have:
+
+- A valid API key with the `encounters:write` and `notes:write` scopes
+- A registered patient ID (see the [Patient Registration guide](/guides/patient-registration))
+- The rendering provider's NPI
+
+---
+
+## Step 1 — Create or Retrieve an Encounter
+
+Every clinical note must belong to an encounter. If you are starting a new visit, create one with `POST /encounters`. If the encounter already exists (for example, it was created at check-in), retrieve it with `GET /encounters/{id}`.
+
+<Tabs>
+  <Tab title="Create a new encounter">
+    <CodeGroup>
+
+    ```bash curl
+    curl --request POST \
+      --url https://api.codecraftinghub.com/v1/encounters \
+      --header "Authorization: Bearer YOUR_API_KEY" \
+      --header "Content-Type: application/json" \
+      --data '{
+        "patient_id": "pat_01HX9Z2K3M4N5P6Q7R8S9T0U",
+        "provider_npi": "1234567890",
+        "service_date": "2024-01-15",
+        "place_of_service_code": "11",
+        "encounter_type": "office_visit"
+      }'
+    ```
+
+    ```python Python
+    import requests
+
+    url = "https://api.codecraftinghub.com/v1/encounters"
+    headers = {
+        "Authorization": "Bearer YOUR_API_KEY",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "patient_id": "pat_01HX9Z2K3M4N5P6Q7R8S9T0U",
+        "provider_npi": "1234567890",
+        "service_date": "2024-01-15",
+        "place_of_service_code": "11",
+        "encounter_type": "office_visit",
+    }
+
+    response = requests.post(url, json=payload, headers=headers)
+    response.raise_for_status()
+
+    encounter = response.json()
+    encounter_id = encounter["id"]
+    print(f"Encounter created: {encounter_id}")
+    ```
+
+    </CodeGroup>
+  </Tab>
+  <Tab title="Retrieve an existing encounter">
+    <CodeGroup>
+
+    ```bash curl
+    curl --request GET \
+      --url https://api.codecraftinghub.com/v1/encounters/enc_01HXA1B2C3D4E5F6G7H8I9J0K \
+      --header "Authorization: Bearer YOUR_API_KEY"
+    ```
+
+    ```python Python
+    import requests
+
+    encounter_id = "enc_01HXA1B2C3D4E5F6G7H8I9J0K"
+    url = f"https://api.codecraftinghub.com/v1/encounters/{encounter_id}"
+    headers = {"Authorization": "Bearer YOUR_API_KEY"}
+
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()
+
+    encounter = response.json()
+    print(f"Encounter status: {encounter['status']}")
+    ```
+
+    </CodeGroup>
+  </Tab>
+</Tabs>
+
+Store the encounter `id` — you will use it in every subsequent call in this guide.
+
+---
+
+## Step 2 — Add a SOAP Note
+
+SOAP notes are the standard clinical documentation format used in outpatient care. Send the four SOAP sections as structured fields in the request body.
+
+### SOAP section reference
+
+| Section | Field | Purpose |
+|---|---|---|
+| **S**ubjective | `subjective` | Patient's chief complaint in their own words |
+| **O**bjective | `objective` | Exam findings, vital signs, lab and imaging results |
+| **A**ssessment | `assessment` | Provider's clinical interpretation and differential diagnoses |
+| **P**lan | `plan` | Treatment orders, prescriptions, referrals, and follow-up instructions |
+
+<CodeGroup>
+
+```bash curl
+curl --request POST \
+  --url https://api.codecraftinghub.com/v1/encounters/enc_01HXA1B2C3D4E5F6G7H8I9J0K/notes \
+  --header "Authorization: Bearer YOUR_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "note_type": "soap",
+    "subjective": "Patient presents with sore throat and mild fever for 3 days. Denies cough or shortness of breath.",
+    "objective": "Temp: 101.2°F, HR: 88 bpm, BP: 120/78 mmHg. Pharynx erythematous with no exudate. Tonsils 2+.",
+    "assessment": "Acute pharyngitis, likely viral. Strep test negative.",
+    "plan": "Supportive care: rest, fluids, OTC analgesics. Follow up in 5 days if symptoms worsen. Patient counseled on signs of secondary infection."
+  }'
+```
+
+```python Python
+import requests
+
+encounter_id = "enc_01HXA1B2C3D4E5F6G7H8I9J0K"
+url = f"https://api.codecraftinghub.com/v1/encounters/{encounter_id}/notes"
+headers = {
+    "Authorization": "Bearer YOUR_API_KEY",
+    "Content-Type": "application/json",
+}
+payload = {
+    "note_type": "soap",
+    "subjective": (
+        "Patient presents with sore throat and mild fever for 3 days. "
+        "Denies cough or shortness of breath."
+    ),
+    "objective": (
+        "Temp: 101.2°F, HR: 88 bpm, BP: 120/78 mmHg. "
+        "Pharynx erythematous with no exudate. Tonsils 2+."
+    ),
+    "assessment": "Acute pharyngitis, likely viral. Strep test negative.",
+    "plan": (
+        "Supportive care: rest, fluids, OTC analgesics. "
+        "Follow up in 5 days if symptoms worsen. "
+        "Patient counseled on signs of secondary infection."
+    ),
+}
+
+response = requests.post(url, json=payload, headers=headers)
+response.raise_for_status()
+
+note = response.json()
+print(f"Note created: {note['id']}")
+```
+
+</CodeGroup>
+
+**Example response:**
+
+```json
+{
+  "id": "note_01HXA2B3C4D5E6F7G8H9I0J1K",
+  "encounter_id": "enc_01HXA1B2C3D4E5F6G7H8I9J0K",
+  "note_type": "soap",
+  "subjective": "Patient presents with sore throat and mild fever for 3 days. Denies cough or shortness of breath.",
+  "objective": "Temp: 101.2°F, HR: 88 bpm, BP: 120/78 mmHg. Pharynx erythematous with no exudate. Tonsils 2+.",
+  "assessment": "Acute pharyngitis, likely viral. Strep test negative.",
+  "plan": "Supportive care: rest, fluids, OTC analgesics. Follow up in 5 days if symptoms worsen. Patient counseled on signs of secondary infection.",
+  "authored_at": "2024-01-15T10:30:00Z",
+  "status": "draft"
+}
+```
+
+<Note>
+  Notes are created in `draft` status. They become read-only when the encounter is marked `completed` in Step 5. You can update a draft note at any time with `PUT /encounters/{id}/notes/{note_id}`.
+</Note>
+
+---
+
+## Step 3 — Attach Diagnoses (ICD-10 Codes)
+
+Add structured diagnoses to the encounter using ICD-10-CM codes. Use `PUT /encounters/{id}` and supply the `diagnoses` array. Assign `sequence: 1` to the primary diagnosis.
+
+<CodeGroup>
+
+```bash curl
+curl --request PUT \
+  --url https://api.codecraftinghub.com/v1/encounters/enc_01HXA1B2C3D4E5F6G7H8I9J0K \
+  --header "Authorization: Bearer YOUR_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "diagnoses": [
+      {
+        "code": "J02.9",
+        "system": "ICD-10-CM",
+        "sequence": 1,
+        "description": "Acute pharyngitis, unspecified"
+      }
+    ]
+  }'
+```
+
+```python Python
+import requests
+
+encounter_id = "enc_01HXA1B2C3D4E5F6G7H8I9J0K"
+url = f"https://api.codecraftinghub.com/v1/encounters/{encounter_id}"
+headers = {
+    "Authorization": "Bearer YOUR_API_KEY",
+    "Content-Type": "application/json",
+}
+payload = {
+    "diagnoses": [
+        {
+            "code": "J02.9",
+            "system": "ICD-10-CM",
+            "sequence": 1,
+            "description": "Acute pharyngitis, unspecified",
+        }
+    ]
+}
+
+response = requests.put(url, json=payload, headers=headers)
+response.raise_for_status()
+print("Diagnoses attached.")
+```
+
+</CodeGroup>
+
+<Warning>
+  Always list diagnoses in medical significance order, not alphabetical order. Sequence 1 is used as the **principal diagnosis** on the resulting claim. Incorrect sequencing is a leading cause of claim denials.
+</Warning>
+
+---
+
+## Step 4 — Attach Procedures (CPT Codes)
+
+Add the billable procedures performed during the encounter. Include `charge` for each line—this drives the claim's billed amount.
+
+<CodeGroup>
+
+```bash curl
+curl --request PUT \
+  --url https://api.codecraftinghub.com/v1/encounters/enc_01HXA1B2C3D4E5F6G7H8I9J0K \
+  --header "Authorization: Bearer YOUR_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "procedures": [
+      {
+        "code": "99213",
+        "system": "CPT",
+        "sequence": 1,
+        "description": "Office visit, moderate complexity",
+        "units": 1,
+        "charge": 150.00
+      },
+      {
+        "code": "87880",
+        "system": "CPT",
+        "sequence": 2,
+        "description": "Strep test, rapid",
+        "units": 1,
+        "charge": 35.00
+      }
+    ]
+  }'
+```
+
+```python Python
+import requests
+
+encounter_id = "enc_01HXA1B2C3D4E5F6G7H8I9J0K"
+url = f"https://api.codecraftinghub.com/v1/encounters/{encounter_id}"
+headers = {
+    "Authorization": "Bearer YOUR_API_KEY",
+    "Content-Type": "application/json",
+}
+payload = {
+    "procedures": [
+        {
+            "code": "99213",
+            "system": "CPT",
+            "sequence": 1,
+            "description": "Office visit, moderate complexity",
+            "units": 1,
+            "charge": 150.00,
+        },
+        {
+            "code": "87880",
+            "system": "CPT",
+            "sequence": 2,
+            "description": "Strep test, rapid",
+            "units": 1,
+            "charge": 35.00,
+        },
+    ]
+}
+
+response = requests.put(url, json=payload, headers=headers)
+response.raise_for_status()
+print("Procedures attached.")
+```
+
+</CodeGroup>
+
+<Tip>
+  You can combine diagnoses and procedures into a single `PUT /encounters/{id}` call. Separate calls are shown here for clarity—both approaches produce identical results.
+</Tip>
+
+---
+
+## Step 5 — Mark the Encounter as Completed
+
+Once the note is signed, diagnoses coded, and procedures captured, set the encounter `status` to `completed`. This finalizes the clinical record and makes the encounter eligible for claim submission.
+
+<CodeGroup>
+
+```bash curl
+curl --request PUT \
+  --url https://api.codecraftinghub.com/v1/encounters/enc_01HXA1B2C3D4E5F6G7H8I9J0K \
+  --header "Authorization: Bearer YOUR_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "diagnoses": [
+      {"code": "J02.9", "system": "ICD-10-CM", "sequence": 1, "description": "Acute pharyngitis, unspecified"}
+    ],
+    "procedures": [
+      {"code": "99213", "system": "CPT", "sequence": 1, "description": "Office visit, moderate complexity", "units": 1, "charge": 150.00},
+      {"code": "87880", "system": "CPT", "sequence": 2, "description": "Strep test, rapid", "units": 1, "charge": 35.00}
+    ],
+    "status": "completed"
+  }'
+```
+
+```python Python
+import requests
+
+encounter_id = "enc_01HXA1B2C3D4E5F6G7H8I9J0K"
+url = f"https://api.codecraftinghub.com/v1/encounters/{encounter_id}"
+headers = {
+    "Authorization": "Bearer YOUR_API_KEY",
+    "Content-Type": "application/json",
+}
+payload = {
+    "diagnoses": [
+        {
+            "code": "J02.9",
+            "system": "ICD-10-CM",
+            "sequence": 1,
+            "description": "Acute pharyngitis, unspecified",
+        }
+    ],
+    "procedures": [
+        {
+            "code": "99213",
+            "system": "CPT",
+            "sequence": 1,
+            "description": "Office visit, moderate complexity",
+            "units": 1,
+            "charge": 150.00,
+        },
+        {
+            "code": "87880",
+            "system": "CPT",
+            "sequence": 2,
+            "description": "Strep test, rapid",
+            "units": 1,
+            "charge": 35.00,
+        },
+    ],
+    "status": "completed",
+}
+
+response = requests.put(url, json=payload, headers=headers)
+response.raise_for_status()
+
+encounter = response.json()
+print(f"Encounter status: {encounter['status']}")
+# Output: Encounter status: completed
+```
+
+</CodeGroup>
+
+**Example response:**
+
+```json
+{
+  "id": "enc_01HXA1B2C3D4E5F6G7H8I9J0K",
+  "patient_id": "pat_01HX9Z2K3M4N5P6Q7R8S9T0U",
+  "status": "completed",
+  "service_date": "2024-01-15",
+  "diagnoses": [
+    {"code": "J02.9", "system": "ICD-10-CM", "sequence": 1, "description": "Acute pharyngitis, unspecified"}
+  ],
+  "procedures": [
+    {"code": "99213", "system": "CPT", "sequence": 1, "description": "Office visit, moderate complexity", "units": 1, "charge": 150.00},
+    {"code": "87880", "system": "CPT", "sequence": 2, "description": "Strep test, rapid", "units": 1, "charge": 35.00}
+  ],
+  "completed_at": "2024-01-15T11:00:00Z"
+}
+```
+
+<Warning>
+  Setting `status` to `completed` locks the encounter. All associated notes transition from `draft` to `final`. To amend a completed encounter, use the `POST /encounters/{id}/amendments` endpoint, which creates an auditable correction record.
+</Warning>
+
+---
+
+## Complete Documentation Flow
+
+<Steps>
+  <Step title="Create or retrieve the encounter">
+    Use `POST /encounters` for a new visit or `GET /encounters/{id}` for an existing one. Store the encounter `id`.
+  </Step>
+  <Step title="POST /encounters/{id}/notes">
+    Submit the SOAP note with all four sections: `subjective`, `objective`, `assessment`, and `plan`.
+  </Step>
+  <Step title="Attach ICD-10 diagnoses">
+    Call `PUT /encounters/{id}` with the `diagnoses` array. Sequence 1 is the principal diagnosis.
+  </Step>
+  <Step title="Attach CPT procedures">
+    Call `PUT /encounters/{id}` with the `procedures` array. Include `charge` for each line item.
+  </Step>
+  <Step title="Mark status: completed">
+    Issue a final `PUT /encounters/{id}` with `"status": "completed"` to lock the record and enable claim submission.
+  </Step>
+</Steps>
+
+---
+
+## What's Next
+
+<CardGroup cols={2}>
+  <Card title="Claims Submission" icon="file-invoice-dollar" href="/guides/claims-submission">
+    Turn a completed encounter into a submitted professional claim.
+  </Card>
+  <Card title="Eligibility Verification" icon="shield-check" href="/guides/eligibility-verification">
+    Confirm coverage and benefits before the patient arrives.
+  </Card>
+  <Card title="Patient Registration" icon="user-plus" href="/guides/patient-registration">
+    Register a new patient and attach their insurance policy.
+  </Card>
+  <Card title="Encounter API Reference" icon="code" href="/api-reference/encounters/create">
+    Full schema reference for the encounters and notes endpoints.
+  </Card>
+</CardGroup>

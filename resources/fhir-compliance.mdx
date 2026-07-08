@@ -1,0 +1,161 @@
+---
+title: "FHIR R4 Compliance & Interoperability Guide"
+sidebarTitle: "FHIR R4"
+description: "Access FHIR R4 resources, perform bulk exports, and integrate with US Core and SMART on FHIR using CodeCrafting Hub's API."
+---
+
+CodeCrafting Hub exposes a fully conformant FHIR R4 API layer alongside its native REST endpoints, giving you interoperability with any FHIR-aware system out of the box. All FHIR resources are read and written through the dedicated FHIR base URL, and every response conforms to the HL7 FHIR R4 specification.
+
+**FHIR Base URL:** `https://api.codecraftinghub.com/fhir/r4`
+
+<Note>
+  Authentication works the same way as the native API. Include your `Authorization: Bearer YOUR_API_KEY` header on every FHIR request.
+</Note>
+
+## Supported FHIR Resources
+
+CodeCrafting Hub supports the following FHIR R4 resource types. Each resource maps directly to its native platform equivalent.
+
+| FHIR Resource | Native Equivalent | Description |
+|---|---|---|
+| `Patient` | Patient | Demographic and administrative data |
+| `Encounter` | Encounter | Clinical visit and episode records |
+| `Claim` | Claim | Professional and institutional billing claims |
+| `Coverage` | Insurance / Eligibility | Patient insurance coverage and plan details |
+| `Practitioner` | Provider | Clinician and billing provider records |
+| `Organization` | Practice / Facility | Practice, group, and facility records |
+| `Observation` | Clinical Note / Vitals | Clinical observations, vitals, and lab results |
+
+## US Core Implementation Guide
+
+CodeCrafting Hub aligns with the **US Core Implementation Guide** (v6.1.0), which builds on FHIR R4 to define minimum data requirements for US healthcare interoperability. All `Patient`, `Encounter`, and `Practitioner` resources returned by the API satisfy US Core profile constraints.
+
+<Tip>
+  If you are building a certified health IT module or integrating with an EHR under the ONC information-blocking rules, US Core alignment ensures your integration meets regulatory expectations without additional mapping.
+</Tip>
+
+## Retrieve FHIR Resources
+
+### Patient
+
+Retrieve a single patient in FHIR R4 format by passing the CodeCrafting Hub patient ID as the resource ID.
+
+```bash
+curl https://api.codecraftinghub.com/fhir/r4/Patient/pat_01HX9Z2K3M4N5P6Q7R8S9T0U \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+**Example response:**
+
+```json
+{
+  "resourceType": "Patient",
+  "id": "pat_01HX9Z2K3M4N5P6Q7R8S9T0U",
+  "meta": {
+    "versionId": "1",
+    "lastUpdated": "2024-01-15T10:30:00Z"
+  },
+  "identifier": [
+    {
+      "system": "https://api.codecraftinghub.com/patients",
+      "value": "pat_01HX9Z2K3M4N5P6Q7R8S9T0U"
+    },
+    {
+      "system": "http://hl7.org/fhir/sid/us-npi",
+      "value": "MRN-00042"
+    }
+  ],
+  "name": [
+    {
+      "family": "Smith",
+      "given": ["Jane"]
+    }
+  ],
+  "gender": "female",
+  "birthDate": "1985-03-14",
+  "address": [
+    {
+      "line": ["123 Main St"],
+      "city": "Austin",
+      "state": "TX",
+      "postalCode": "78701"
+    }
+  ]
+}
+```
+
+### Encounter
+
+Retrieve a single encounter in FHIR R4 format.
+
+```bash
+curl https://api.codecraftinghub.com/fhir/r4/Encounter/enc_01HXA1B2C3D4E5F6G7H8I9J0K \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+### Search
+
+All supported resource types accept FHIR-standard search parameters using query strings.
+
+```bash
+# Search for all encounters for a specific patient
+curl "https://api.codecraftinghub.com/fhir/r4/Encounter?patient=pat_01HX9Z2K3M4N5P6Q7R8S9T0U" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+<Info>
+  CodeCrafting Hub supports the `_include`, `_revinclude`, `_count`, and `_sort` search modifiers on all resource types. Refer to the FHIR R4 specification for full search parameter syntax.
+</Info>
+
+## Bulk FHIR Export
+
+For large-scale data access — such as population health analytics or payer reporting — use the FHIR Bulk Data Export endpoint. This triggers an asynchronous export of all available resources for your organization.
+
+<Steps>
+  <Step title="Initiate the export">
+    Send a `GET` request to the `$export` operation endpoint.
+
+    ```bash
+    curl -X GET "https://api.codecraftinghub.com/fhir/r4/\$export" \
+      -H "Authorization: Bearer YOUR_API_KEY" \
+      -H "Accept: application/fhir+json" \
+      -H "Prefer: respond-async"
+    ```
+
+    The server responds with `202 Accepted` and a `Content-Location` header pointing to a status URL.
+  </Step>
+  <Step title="Poll the status URL">
+    Check the export status by polling the URL from the `Content-Location` header until the response is `200 OK`.
+
+    ```bash
+    curl https://api.codecraftinghub.com/fhir/r4/$export-status/job_01HXF1G2H3 \
+      -H "Authorization: Bearer YOUR_API_KEY"
+    ```
+  </Step>
+  <Step title="Download the NDJSON files">
+    When the status is complete, the response body lists download URLs for each resource type as newline-delimited JSON (NDJSON) files. Download and process each file.
+  </Step>
+</Steps>
+
+<Warning>
+  Bulk exports may contain PHI for your entire patient population. Ensure your downstream storage and processing systems meet HIPAA requirements before initiating an export. Never redirect export files to unsecured storage.
+</Warning>
+
+## SMART on FHIR Authorization
+
+CodeCrafting Hub supports **SMART on FHIR** for third-party app authorization, enabling launch contexts and patient-scoped access tokens that follow the SMART App Launch Framework.
+
+<Note>
+  SMART on FHIR app registration is not self-serve. Contact [support@codecraftinghub.com](mailto:support@codecraftinghub.com) or your account manager to register your SMART app and receive a `client_id`. Provide your launch URL and redirect URIs at the time of registration.
+</Note>
+
+Once registered, your app can request SMART scopes (e.g., `patient/Patient.read`, `user/Encounter.read`) during the OAuth 2.0 authorization flow.
+
+## FHIR Capability Statement
+
+Retrieve the server's full capability statement to programmatically discover supported resources, search parameters, and operations.
+
+```bash
+curl https://api.codecraftinghub.com/fhir/r4/metadata \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```

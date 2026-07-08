@@ -1,0 +1,195 @@
+---
+title: "Billing & RCM: Claims, Payments & Denial Management"
+sidebarTitle: "Billing & RCM"
+description: "Master the full revenue cycle in CodeCrafting Hub: eligibility verification, claim submission, ERA processing, denial management, and payment posting."
+---
+
+Revenue Cycle Management (RCM) is the end-to-end financial process that begins the moment a patient schedules an appointment and ends when every dollar owed for that visit has been collected or written off. CodeCrafting Hub automates the most labor-intensive parts of this cycle — eligibility checks, EDI claim transmission, ERA parsing, and denial routing — while giving your team full visibility and control at every stage.
+
+## The RCM Lifecycle
+
+<Steps>
+  <Step title="Patient Registration">
+    Collect and verify patient demographics and insurance information before the visit. Accurate registration data is the single biggest factor in downstream claim acceptance rates. Create or update the patient record at `POST /patients` and attach insurance policies at `POST /patients/{id}/insurance-policies`.
+  </Step>
+  <Step title="Eligibility Verification">
+    Before the patient is seen, verify their insurance coverage in real time against the payer. Send a `POST /eligibility/verify` request with the patient's insurance policy ID and service date. The platform transmits an EDI 270 transaction and returns a structured 271 response with benefit details, copay/deductible amounts, and coverage limitations.
+
+    <Tip>
+      Configure automatic eligibility verification on appointment confirmation by enabling the `auto_verify_eligibility` setting on your organization. The platform will check eligibility 72 hours, 24 hours, and at the time of check-in.
+    </Tip>
+  </Step>
+  <Step title="Service & Clinical Documentation">
+    The provider delivers care and documents the encounter with diagnosis and procedure codes. See the [Encounters concept page](/concepts/encounters) for the clinical documentation model.
+  </Step>
+  <Step title="Coding">
+    Diagnosis codes (ICD-10-CM) and procedure codes (CPT/HCPCS) are assigned to the encounter. CodeCrafting Hub validates codes against current code sets and flags potential coding issues — such as diagnosis-procedure mismatch or bundling conflicts — before claim generation.
+  </Step>
+  <Step title="Claim Submission">
+    Generate and submit a claim from the completed encounter. The platform encodes the claim as an EDI 837P (professional) or 837I (institutional) transaction, routes it through the appropriate clearinghouse, and returns a real-time claim acknowledgment.
+  </Step>
+  <Step title="Adjudication">
+    The payer reviews the claim and makes a payment determination. This process typically takes 14–30 days for commercial payers and 30–45 days for government payers. You can poll claim status at any time via `GET /claims/{id}` or receive real-time status updates via webhooks.
+  </Step>
+  <Step title="Payment Posting">
+    When the payer processes the claim, they issue an Electronic Remittance Advice (ERA/835 transaction). CodeCrafting Hub automatically ingests incoming ERA files, reconciles payments against outstanding claims, and posts payment records. You can also post manual payments for situations where ERAs are unavailable.
+  </Step>
+  <Step title="Denial Management">
+    Claims that are denied are automatically routed into the denial management workflow. The platform parses denial reason codes (CARC/RARC), categorizes them, and routes them to the appropriate work queue for resolution, appeal, or write-off.
+  </Step>
+</Steps>
+
+## Claims: Professional vs. Institutional
+
+CodeCrafting Hub supports both major claim form types. The `claim_type` field on the Claim object determines which EDI transaction format is used for transmission.
+
+<Tabs>
+  <Tab title="Professional (837P)">
+    **`claim_type: "professional"`**
+
+    Used for services billed by individual providers, physician groups, and most outpatient settings. Corresponds to the paper CMS-1500 claim form. The 837P format supports up to 99 service line items per claim.
+
+    **Common use cases:** office visits, telehealth, outpatient procedures, lab/radiology professional components, therapy services.
+  </Tab>
+  <Tab title="Institutional (837I)">
+    **`claim_type: "institutional"`**
+
+    Used for facility charges from hospitals, skilled nursing facilities, home health agencies, and other institutional providers. Corresponds to the paper UB-04 claim form. Institutional claims include revenue codes and condition codes not present in professional claims.
+
+    **Common use cases:** inpatient admissions, outpatient hospital services, emergency department facility fees, SNF stays.
+
+    <Note>
+      Institutional claim generation requires additional encounter fields (`admission_date`, `discharge_date`, `revenue_codes`) beyond those required for professional claims. Verify your encounter object is complete before calling `generate-claim` for inpatient encounters.
+    </Note>
+  </Tab>
+</Tabs>
+
+## Claim Statuses
+
+A claim moves through the following status values as it progresses through the revenue cycle:
+
+| Status | Description |
+|---|---|
+| `draft` | Claim has been generated but not yet submitted. Editable. |
+| `submitted` | Claim has been transmitted to the payer or clearinghouse. Awaiting acknowledgment. |
+| `accepted` | Payer has acknowledged receipt and the claim passed front-end edits. Under adjudication. |
+| `rejected` | Clearinghouse or payer rejected the claim before adjudication due to a formatting or eligibility error. Must be corrected and resubmitted. |
+| `denied` | Payer adjudicated the claim and issued a denial. A denial reason code is present. Eligible for appeal or write-off. |
+| `paid` | Payer has issued full or partial payment. A Payment record is linked to the claim. |
+| `appealed` | A formal appeal has been filed against a denial. Awaiting payer's appeal determination. |
+
+<Warning>
+  `rejected` and `denied` are distinct statuses. A **rejection** occurs before adjudication — the claim never entered the payer's system. A **denial** occurs after adjudication — the payer reviewed the claim and decided not to pay. The corrective actions and timelines differ significantly between the two.
+</Warning>
+
+## Eligibility Verification
+
+Real-time eligibility verification lets you confirm a patient's active coverage, benefit details, and cost-sharing responsibilities before the visit begins, drastically reducing claim denials due to eligibility-related issues.
+
+<CodeGroup>
+  ```json Request
+  POST /eligibility/verify
+  {
+    "patient_id": "pat_01HX9Z2K3M4N5P6Q7R8S9T0U",
+    "insurance_policy_id": "pol_01HXC1D2E3F4G5H6I7J8K9L0M",
+    "service_date": "2024-01-15",
+    "service_type_codes": ["30", "98"]
+  }
+  ```
+  ```json Response
+  {
+    "status": "active",
+    "subscriber_name": "Jane Smith",
+    "member_id": "BCB123456789",
+    "group_number": "GRP-00100",
+    "plan_name": "BCBS TX PPO Gold",
+    "deductible": {"individual": 1500.00, "met": 425.00, "remaining": 1075.00},
+    "out_of_pocket_max": {"individual": 5000.00, "met": 425.00, "remaining": 4575.00},
+    "copay": {"primary_care": 30.00, "specialist": 60.00},
+    "coinsurance": 0.20,
+    "verified_at": "2024-01-15T09:00:00Z"
+  }
+  ```
+</CodeGroup>
+
+## ERA and EOB Processing
+
+When payers adjudicate claims, they issue remittance documents that explain payment decisions:
+
+**Electronic Remittance Advice (ERA / ANSI X12 835):** A machine-readable file transmitted electronically that details payments, adjustments, and denial reasons for one or more claims. CodeCrafting Hub automatically ingests ERA files from enrolled payers, parses each claim-level and service-line-level adjustment, and posts payment records.
+
+**Explanation of Benefits (EOB):** A patient-facing document from the payer explaining what was billed, what was paid, and what the patient owes. While EOBs are generated by payers and sent directly to patients, CodeCrafting Hub can generate a synthetic EOB from ERA data for patient portal display purposes via `GET /claims/{id}/eob`.
+
+<Info>
+  ERA enrollment is required with each payer before you can receive electronic remittances. Use the `POST /payer-enrollments` endpoint to initiate enrollment. Typical ERA enrollment timelines range from 3–10 business days per payer.
+</Info>
+
+## Denial Management & Appeals
+
+The denial management workflow surfaces actionable denial information and tracks your team's resolution efforts.
+
+<Steps>
+  <Step title="Denial is received and parsed">
+    When an ERA contains a denied claim line, CodeCrafting Hub parses the Claim Adjustment Reason Code (CARC) and Remittance Advice Remark Code (RARC), and transitions the claim to `denied` status. A denial record is created with a human-readable explanation of the denial reason.
+  </Step>
+  <Step title="Denial is categorized and routed">
+    The platform automatically categorizes denials by root cause — eligibility, coding, authorization, timely filing, duplicate — and routes them to the appropriate work queue. You can view denial queues at `GET /denials?category=coding`.
+  </Step>
+  <Step title="Corrective action is taken">
+    Your billing team reviews the denial, corrects the underlying issue (e.g., updates a diagnosis code, obtains a retroactive authorization), and resubmits the corrected claim or initiates a formal appeal.
+  </Step>
+  <Step title="Appeal is filed">
+    File a formal appeal with `POST /claims/{id}/appeal`, attaching supporting documentation (medical records, authorization forms). The claim status transitions to `appealed`. Track appeal deadlines — most payers require appeals within 90–180 days of the denial date.
+  </Step>
+  <Step title="Resolution">
+    Appeals result in either an overturn (payer pays the claim) or an uphold (denial is confirmed). For upheld denials, your team can write off the balance or bill the patient depending on payer contract terms and clinical circumstances.
+  </Step>
+</Steps>
+
+## Key Billing Identifiers
+
+<CardGroup cols={3}>
+  <Card title="NPI" icon="id-card">
+    **National Provider Identifier.** A 10-digit unique identifier assigned to healthcare providers by CMS. Every rendering provider, supervising provider, and billing entity must have an NPI. Required on all claim submissions.
+  </Card>
+  <Card title="Tax ID / EIN" icon="building">
+    **Employer Identification Number.** Your organization's federal tax ID used for billing purposes. The Tax ID on the claim must match the Tax ID on file with the payer, or the claim will be rejected.
+  </Card>
+  <Card title="Payer ID" icon="landmark">
+    **Electronic Payer ID.** A unique identifier (typically 5 digits) that routes your EDI claim to the correct payer through the clearinghouse network. CodeCrafting Hub maintains a directory of payer IDs at `GET /payers`.
+  </Card>
+</CardGroup>
+
+## Sample Claim Object
+
+```json
+{
+  "id": "clm_01HXB1C2D3E4F5G6H7I8J9K0L",
+  "encounter_id": "enc_01HXA1B2C3D4E5F6G7H8I9J0K",
+  "patient_id": "pat_01HX9Z2K3M4N5P6Q7R8S9T0U",
+  "claim_type": "professional",
+  "payer_id": "payer_bcbs_tx_001",
+  "total_charge": 150.00,
+  "status": "submitted",
+  "submitted_at": "2024-01-15T16:00:00Z",
+  "payer_claim_number": null
+}
+```
+
+<Note>
+  `payer_claim_number` is `null` until the payer acknowledges the claim and assigns their internal tracking number. This typically happens within 24–48 hours of submission for electronically enrolled payers. Use this number when calling payer provider lines for status inquiries.
+</Note>
+
+## Related Resources
+
+<CardGroup cols={3}>
+  <Card title="Encounters" icon="stethoscope" href="/concepts/encounters">
+    The clinical source of truth that drives claim generation.
+  </Card>
+  <Card title="Patients" icon="hospital-user" href="/concepts/patients">
+    Patient and insurance policy records that anchor the billing workflow.
+  </Card>
+  <Card title="Claims API" icon="code" href="/api-reference/claims">
+    Full API reference for claims, payments, appeals, and denial management endpoints.
+  </Card>
+</CardGroup>

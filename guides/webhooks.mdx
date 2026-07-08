@@ -1,0 +1,179 @@
+---
+title: "Setting Up and Receiving Webhooks (CCHub)"
+sidebarTitle: "Webhooks"
+description: "Register webhook endpoints, verify signatures, and handle real-time event notifications from CodeCrafting Hub's EHR & RCM API."
+---
+
+Webhooks let your application receive real-time notifications whenever key events occur in CodeCrafting Hub — such as a claim changing status, a patient being created, or an appointment being cancelled. Instead of polling the API, you register an HTTPS endpoint and CodeCrafting Hub delivers a signed JSON payload to it automatically.
+
+<Note>
+  Your webhook endpoint must be publicly reachable over HTTPS. CodeCrafting Hub does not deliver events to `localhost` or non-TLS URLs in production.
+</Note>
+
+## Supported Events
+
+The following events can trigger a webhook delivery. Subscribe to only the events your application needs to keep payload volume manageable.
+
+| Event | Trigger | Object Type |
+|---|---|---|
+| `claim.submitted` | A claim is submitted to a payer | `claim` |
+| `claim.accepted` | A payer accepts a submitted claim | `claim` |
+| `claim.denied` | A payer denies a submitted claim | `claim` |
+| `claim.paid` | A payment is posted against a claim | `claim` |
+| `patient.created` | A new patient record is created | `patient` |
+| `encounter.completed` | An encounter is marked as completed | `encounter` |
+| `eligibility.checked` | An eligibility verification is completed | `eligibility` |
+| `appointment.created` | A new appointment is scheduled | `appointment` |
+| `appointment.cancelled` | An existing appointment is cancelled | `appointment` |
+
+## Register a Webhook Endpoint
+
+<Steps>
+  <Step title="Prepare your endpoint">
+    Make sure your server can receive `POST` requests at a publicly accessible HTTPS URL and return an HTTP `200` response within **5 seconds**. Store any heavy processing for an async queue — do not block on the response.
+  </Step>
+  <Step title="Create the webhook">
+    Send a `POST` request to `/webhooks` with your endpoint URL and the list of events you want to subscribe to.
+
+    ```bash
+    curl -X POST https://api.codecraftinghub.com/v1/webhooks \
+      -H "Authorization: Bearer YOUR_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "url": "https://yourapp.com/webhooks/codecraftinghub",
+        "events": ["claim.submitted", "claim.accepted", "claim.denied", "claim.paid"],
+        "description": "Production claim status webhook"
+      }'
+    ```
+
+    A successful response returns the new webhook object including its `id` and `secret`. **Store the secret securely** — you need it to verify incoming signatures and it is only shown once.
+  </Step>
+  <Step title="Save your webhook secret">
+    Copy the `secret` value from the response and store it as an environment variable (e.g., `CCHUB_WEBHOOK_SECRET`). Never commit it to source control.
+  </Step>
+  <Step title="Verify your first delivery">
+    CodeCrafting Hub sends a test `ping` event immediately after registration. Confirm your endpoint receives it and returns `200` before going live.
+  </Step>
+</Steps>
+
+### Request Body
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `url` | string | ✅ | Your HTTPS endpoint URL |
+| `events` | array | ✅ | One or more event names to subscribe to |
+| `description` | string | — | Human-readable label for this webhook |
+
+## Webhook Payload Structure
+
+Every event delivery sends a `POST` request with a JSON body in the following shape:
+
+```json
+{
+  "id": "evt_01HXD1E2F3G4H5I6J7K8L9M0N",
+  "type": "claim.accepted",
+  "created_at": "2024-01-15T18:30:00Z",
+  "data": {
+    "object": "claim",
+    "id": "clm_01HXB1C2D3E4F5G6H7I8J9K0L",
+    "status": "accepted",
+    "payer_claim_number": "BCB-2024-0115-001",
+    "patient_id": "pat_01HX9Z2K3M4N5P6Q7R8S9T0U",
+    "encounter_id": "enc_01HXA1B2C3D4E5F6G7H8I9J0K"
+  }
+}
+```
+
+| Field | Description |
+|---|---|
+| `id` | Unique event ID — use this for idempotency checks |
+| `type` | The event name (e.g., `claim.accepted`) |
+| `created_at` | ISO 8601 UTC timestamp of when the event occurred |
+| `data.object` | The resource type affected |
+| `data.id` | The ID of the affected resource |
+| `data.*` | Additional fields specific to the event type |
+
+<Tip>
+  Always use the `id` field to deduplicate events. In rare cases, CodeCrafting Hub may deliver the same event more than once during retries — your handler should be idempotent.
+</Tip>
+
+## Signature Verification
+
+Every webhook request includes an `X-CCHub-Signature` header containing an HMAC-SHA256 signature of the raw request body, prefixed with `sha256=`. Always verify this signature before processing the payload to ensure the request is genuinely from CodeCrafting Hub.
+
+<Warning>
+  Never process a webhook payload without first verifying the `X-CCHub-Signature` header. Skipping this step makes your endpoint vulnerable to spoofed events.
+</Warning>
+
+<CodeGroup>
+
+```python Python
+import hmac
+import hashlib
+
+def verify_signature(payload_body: bytes, signature_header: str, secret: str) -> bool:
+    expected = hmac.new(
+        secret.encode('utf-8'),
+        payload_body,
+        hashlib.sha256
+    ).hexdigest()
+    return hmac.compare_digest(f"sha256={expected}", signature_header)
+```
+
+```javascript Node.js
+const crypto = require('crypto');
+
+function verifySignature(payload, signatureHeader, secret) {
+  const expected = 'sha256=' + crypto
+    .createHmac('sha256', secret)
+    .update(payload)
+    .digest('hex');
+  return crypto.timingSafeEqual(
+    Buffer.from(expected),
+    Buffer.from(signatureHeader)
+  );
+}
+```
+
+</CodeGroup>
+
+<Note>
+  Use the **raw** request body bytes when computing the HMAC — do not parse the JSON first. Parsing and re-serializing may alter whitespace or key ordering and cause verification to fail.
+</Note>
+
+## Retry Behavior
+
+If your endpoint returns a `4xx` or `5xx` status code — or does not respond within 5 seconds — CodeCrafting Hub automatically retries the delivery up to **3 times** using exponential backoff:
+
+| Attempt | Delay |
+|---|---|
+| 1st retry | ~30 seconds |
+| 2nd retry | ~5 minutes |
+| 3rd retry | ~30 minutes |
+
+After three failed retries, the event is marked as `failed` and no further attempts are made. You can manually replay failed events from the **Webhooks** section of the dashboard.
+
+<Warning>
+  If your endpoint is consistently returning errors, CodeCrafting Hub may automatically disable it after a prolonged failure window. Monitor your webhook delivery logs in the dashboard.
+</Warning>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Respond in Under 5 Seconds" icon="bolt">
+    Return an HTTP `200` immediately and hand off processing to an async worker or queue. Long-running handlers cause timeouts and trigger unnecessary retries.
+  </Card>
+  <Card title="Process Asynchronously" icon="list-check">
+    Enqueue the event payload and process it outside the request/response cycle. This keeps your endpoint fast and resilient.
+  </Card>
+  <Card title="Verify Every Signature" icon="shield-check">
+    Always validate the `X-CCHub-Signature` header using your webhook secret before acting on any payload.
+  </Card>
+  <Card title="Implement Idempotency" icon="arrow-rotate-left">
+    Track processed event IDs and skip duplicates. Retries can deliver the same event more than once.
+  </Card>
+</CardGroup>
+
+<Tip>
+  Log the raw `X-CCHub-Signature` header and payload for every incoming request during development. This makes it much easier to debug signature mismatches before going to production.
+</Tip>

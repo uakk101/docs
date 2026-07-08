@@ -1,47 +1,331 @@
 ---
-title: "Quickstart"
-description: "Begin with a guide on the fastest path to a successful outcome"
+title: "Quickstart: Your First CodeCrafting Hub Integration"
+sidebarTitle: "Quickstart"
+description: "Go from zero to a submitted claim in minutes. Create a patient, open an encounter, and submit a claim using the CodeCrafting Hub REST API."
 ---
 
-Describe how someone begins using your product. What is the first thing they need to do? Are there any prerequisites?
+This quickstart walks you through the core CodeCrafting Hub workflow end-to-end: obtaining an API key, verifying your connection, registering a patient, documenting an encounter, and submitting a claim to a payer. Every step includes working `curl` and Python examples you can run immediately against the sandbox environment. By the end, you'll have touched the primary resources that power most healthcare billing integrations.
 
-A quickstart should take someone from zero to using your product. They'll get a quick win and a sense of what they can accomplish.
-
-## Prerequisites
-
-Before you begin, you must have:
-
-- Requirement one (for example, Node.js 18+, a free account, an API key)
-- Requirement two (for example, a compatible device, a compatible browser, a compatible operating system)
-
-## Get started
+<Note>
+  All examples in this quickstart use the **sandbox environment** (`https://sandbox.api.codecraftinghub.com/v1`) and test data. No real PHI is involved and no real claims are submitted to payers. See the [Environments](/environments) page for details on switching to production.
+</Note>
 
 <Steps>
-  <Step title="Install">
-    Describe how to install your product or sign up.
 
-    ```bash
-    npm install your-package
-    ```
-  </Step>
-  <Step title="Configure">
-    Describe any setup or configuration needed before first use.
+<Step title="Get Your API Key">
 
-    ```bash
-    your-cli init
-    ```
-  </Step>
-  <Step title="Run it">
-    Show the first thing a user does to see it working.
+Sign in to the [CodeCrafting Hub Dashboard](https://dashboard.codecraftinghub.com) and navigate to **Settings → API Keys**. Click **Create New Key**, give it a descriptive name (e.g., `quickstart-test`), and copy the generated value — it begins with `cch_test_` for sandbox keys.
 
-    ```bash
-    your-cli start
-    ```
-  </Step>
-</Steps>
+<Warning>
+  Your API key is shown only once at creation time. Store it immediately in a secure secrets manager or environment variable. If you lose it, revoke and regenerate from the dashboard.
+</Warning>
+
+Set the key as an environment variable so the examples below work without modification:
+
+```bash
+export CCH_API_KEY="cch_test_YOUR_KEY_HERE"
+```
+
+</Step>
+
+<Step title="Verify Your Connection">
+
+Before writing any integration code, confirm your key is valid and the API is reachable by calling the health endpoint.
+
+<CodeGroup>
+
+```bash cURL
+curl -s https://sandbox.api.codecraftinghub.com/v1/health \
+  -H "Authorization: Bearer $CCH_API_KEY"
+```
+
+```python Python
+import os
+import requests
+
+api_key = os.environ["CCH_API_KEY"]
+base_url = "https://sandbox.api.codecraftinghub.com/v1"
+
+response = requests.get(
+    f"{base_url}/health",
+    headers={"Authorization": f"Bearer {api_key}"},
+)
+print(response.json())
+```
+
+</CodeGroup>
+
+A successful response looks like this:
+
+```json
+{
+  "status": "ok",
+  "environment": "sandbox",
+  "version": "1.0.0",
+  "timestamp": "2024-01-15T10:00:00Z"
+}
+```
 
 <Tip>
-  Give people a way to get help. This could be a link to a support page, a chat with a customer support agent, or a forum for your product.
-
-  Example: Need help? Reach out to us at [support@yourcompany.com](mailto:support@yourcompany.com).
+  If you receive a `401 Unauthorized`, double-check that you copied the full key value and that the `Authorization` header includes the `Bearer ` prefix (note the trailing space).
 </Tip>
+
+</Step>
+
+<Step title="Create a Patient">
+
+The patient resource is the root of every clinical and billing workflow. Create a patient by posting their demographic and contact information to `POST /patients`.
+
+<CodeGroup>
+
+```bash cURL
+curl -X POST https://sandbox.api.codecraftinghub.com/v1/patients \
+  -H "Authorization: Bearer $CCH_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "first_name": "Jane",
+    "last_name": "Smith",
+    "date_of_birth": "1985-03-14",
+    "gender": "female",
+    "email": "jane.smith@email.com",
+    "phone": "555-867-5309",
+    "address": {
+      "line1": "123 Main St",
+      "city": "Austin",
+      "state": "TX",
+      "zip": "78701"
+    }
+  }'
+```
+
+```python Python
+import os
+import requests
+
+api_key = os.environ["CCH_API_KEY"]
+base_url = "https://sandbox.api.codecraftinghub.com/v1"
+
+patient_data = {
+    "first_name": "Jane",
+    "last_name": "Smith",
+    "date_of_birth": "1985-03-14",
+    "gender": "female",
+    "email": "jane.smith@email.com",
+    "phone": "555-867-5309",
+    "address": {
+        "line1": "123 Main St",
+        "city": "Austin",
+        "state": "TX",
+        "zip": "78701",
+    },
+}
+
+response = requests.post(
+    f"{base_url}/patients",
+    headers={
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    },
+    json=patient_data,
+)
+patient = response.json()
+print(patient["id"])  # e.g. pat_01HX9Z2K3M4N5P6Q7R8S9T0U
+```
+
+</CodeGroup>
+
+A successful `201 Created` response returns the new patient object with a system-assigned ID and medical record number (MRN):
+
+```json
+{
+  "id": "pat_01HX9Z2K3M4N5P6Q7R8S9T0U",
+  "first_name": "Jane",
+  "last_name": "Smith",
+  "date_of_birth": "1985-03-14",
+  "gender": "female",
+  "mrn": "MRN-00042",
+  "created_at": "2024-01-15T10:30:00Z"
+}
+```
+
+Save the `id` field (`pat_01HX9Z2K3M4N5P6Q7R8S9T0U`) — you'll reference it in every subsequent step.
+
+<Info>
+  CodeCrafting Hub automatically checks for duplicate patients using a probabilistic matching algorithm on name, date of birth, and contact information. If a potential duplicate exists, the API returns a `409 Conflict` with a list of candidate matches so you can decide whether to merge or proceed.
+</Info>
+
+</Step>
+
+<Step title="Create an Encounter">
+
+An encounter records a clinical visit: who was seen, by which provider, on what date, with what diagnoses and procedures. Post to `POST /encounters` using the patient ID from the previous step.
+
+<CodeGroup>
+
+```bash cURL
+curl -X POST https://sandbox.api.codecraftinghub.com/v1/encounters \
+  -H "Authorization: Bearer $CCH_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "patient_id": "pat_01HX9Z2K3M4N5P6Q7R8S9T0U",
+    "provider_npi": "1234567890",
+    "service_date": "2024-01-15",
+    "place_of_service": "11",
+    "diagnoses": [
+      {
+        "code": "J06.9",
+        "system": "ICD-10-CM",
+        "description": "Acute upper respiratory infection"
+      }
+    ],
+    "procedures": [
+      {
+        "code": "99213",
+        "system": "CPT",
+        "description": "Office visit, established patient, moderate complexity"
+      }
+    ]
+  }'
+```
+
+```python Python
+import os
+import requests
+
+api_key = os.environ["CCH_API_KEY"]
+base_url = "https://sandbox.api.codecraftinghub.com/v1"
+
+encounter_data = {
+    "patient_id": "pat_01HX9Z2K3M4N5P6Q7R8S9T0U",
+    "provider_npi": "1234567890",
+    "service_date": "2024-01-15",
+    "place_of_service": "11",
+    "diagnoses": [
+        {
+            "code": "J06.9",
+            "system": "ICD-10-CM",
+            "description": "Acute upper respiratory infection",
+        }
+    ],
+    "procedures": [
+        {
+            "code": "99213",
+            "system": "CPT",
+            "description": "Office visit, established patient, moderate complexity",
+        }
+    ],
+}
+
+response = requests.post(
+    f"{base_url}/encounters",
+    headers={
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    },
+    json=encounter_data,
+)
+encounter = response.json()
+print(encounter["id"])  # e.g. enc_02JY0A3L4N5O6P7Q8S9T1V2W
+```
+
+</CodeGroup>
+
+A `201 Created` response returns the encounter with its assigned ID and a `status` of `open`:
+
+```json
+{
+  "id": "enc_02JY0A3L4N5O6P7Q8S9T1V2W",
+  "patient_id": "pat_01HX9Z2K3M4N5P6Q7R8S9T0U",
+  "provider_npi": "1234567890",
+  "service_date": "2024-01-15",
+  "place_of_service": "11",
+  "status": "open",
+  "diagnoses": [
+    { "code": "J06.9", "system": "ICD-10-CM", "description": "Acute upper respiratory infection" }
+  ],
+  "procedures": [
+    { "code": "99213", "system": "CPT", "description": "Office visit, established patient, moderate complexity" }
+  ],
+  "created_at": "2024-01-15T10:35:00Z"
+}
+```
+
+Save the encounter `id` — you'll attach it to the claim in the next step.
+
+</Step>
+
+<Step title="Submit a Claim">
+
+With a patient and encounter in place, submit a professional claim to the payer. CodeCrafting Hub validates the claim payload against payer-specific business rules before forwarding it, and returns validation errors inline if any fields are missing or inconsistent.
+
+<CodeGroup>
+
+```bash cURL
+curl -X POST https://sandbox.api.codecraftinghub.com/v1/claims \
+  -H "Authorization: Bearer $CCH_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "encounter_id": "enc_02JY0A3L4N5O6P7Q8S9T1V2W",
+    "payer_id": "payer_test_bcbs_001",
+    "billing_provider_npi": "1234567890",
+    "claim_type": "professional"
+  }'
+```
+
+```python Python
+import os
+import requests
+
+api_key = os.environ["CCH_API_KEY"]
+base_url = "https://sandbox.api.codecraftinghub.com/v1"
+
+claim_data = {
+    "encounter_id": "enc_02JY0A3L4N5O6P7Q8S9T1V2W",
+    "payer_id": "payer_test_bcbs_001",
+    "billing_provider_npi": "1234567890",
+    "claim_type": "professional",
+}
+
+response = requests.post(
+    f"{base_url}/claims",
+    headers={
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    },
+    json=claim_data,
+)
+claim = response.json()
+print(claim["id"], claim["status"])
+```
+
+</CodeGroup>
+
+A `201 Created` response confirms the claim was accepted and queued for submission:
+
+```json
+{
+  "id": "clm_03KZ1B4M5O6P7Q8R9T0U2W3X",
+  "encounter_id": "enc_02JY0A3L4N5O6P7Q8S9T1V2W",
+  "payer_id": "payer_test_bcbs_001",
+  "claim_type": "professional",
+  "status": "submitted",
+  "submitted_at": "2024-01-15T10:40:00Z"
+}
+```
+
+<Info>
+  In the sandbox, claims move through simulated adjudication automatically. Poll `GET /claims/{id}` or subscribe to the `claim.adjudicated` webhook event to receive the adjudication result without polling. See the [Webhooks](/guides/webhooks) documentation for setup instructions.
+</Info>
+
+</Step>
+
+</Steps>
+
+## You're Up and Running
+
+You've completed the core CodeCrafting Hub workflow: key acquisition → connection test → patient creation → encounter documentation → claim submission. From here, explore these areas to build out your integration:
+
+- **[Eligibility Verification](/api-reference/eligibility)** — Run 270/271 eligibility checks before creating encounters to reduce claim denials.
+- **[Clinical Notes](/api-reference/clinical-notes)** — Attach structured SOAP notes and attachments to encounters.
+- **[Webhooks](/guides/webhooks)** — Subscribe to real-time events for claim status changes, payment posting, and eligibility results.
+- **[Environments](/environments)** — Understand the differences between sandbox and production before going live.

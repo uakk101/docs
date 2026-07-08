@@ -1,0 +1,116 @@
+---
+title: "Platform Overview: Data Model & Resource Relationships"
+sidebarTitle: "Overview"
+description: "Understand how CodeCrafting Hub organizes healthcare data across Organizations, Providers, Patients, Encounters, Claims, and Payments."
+---
+
+CodeCrafting Hub is an API-first healthcare platform that unifies electronic health record (EHR) management and revenue cycle management (RCM) into a single, cohesive data model. Every resource in the platform — from the top-level organization down to individual payment transactions — is connected through a clear hierarchy, making it straightforward to build, query, and automate end-to-end clinical and billing workflows.
+
+## The Resource Hierarchy
+
+The platform's data model is organized as a top-down ownership tree. Each resource belongs to a parent, and child resources inherit the context of their ancestors. Understanding this hierarchy is the fastest way to reason about how data flows through your system.
+
+<Note>
+  **Hierarchy at a glance:**
+  
+  ```
+  Organization
+  └── Providers (one or many per Organization)
+      └── Patients (assigned to an Organization, seen by Providers)
+          └── Encounters (a clinical visit linking a Patient + Provider)
+              └── Claims (billing records generated from an Encounter)
+                  └── Payments (remittances posted against a Claim)
+  ```
+  
+  An **Organization** is the root entity — your practice, hospital, or health system. **Providers** belong to the organization and deliver care. **Patients** are registered under the organization and linked to providers at the time of service. Each clinical visit creates an **Encounter**, which drives one or more **Claims** sent to payers. When payers respond, **Payments** (and denials) are posted back against those claims.
+</Note>
+
+## Core Resources
+
+<CardGroup cols={2}>
+  <Card title="Organization" icon="building-columns">
+    The root entity representing your practice, clinic, or health system. Holds tax identifiers (EIN), NPI at the organizational level, and global configuration such as default payer contracts and fee schedules.
+  </Card>
+  <Card title="Providers" icon="user-doctor">
+    Licensed clinicians or billing entities within your organization. Each provider carries an individual NPI, specialty taxonomy codes, and credentialing status. Providers are linked to encounters at the time of service.
+  </Card>
+  <Card title="Patients" icon="hospital-user">
+    Individuals receiving care. A patient record stores demographics, insurance policies, and a platform-generated Medical Record Number (MRN). See the [Patients concept page](/concepts/patients) for the full data model.
+  </Card>
+  <Card title="Encounters" icon="stethoscope">
+    A documented clinical interaction between a patient and a provider. Encounters capture diagnoses (ICD-10), procedures (CPT/HCPCS), place of service, and clinical notes. See the [Encounters concept page](/concepts/encounters) for details.
+  </Card>
+  <Card title="Claims" icon="file-invoice-dollar">
+    Billing records generated from completed encounters and submitted to payers via EDI 837P (professional) or 837I (institutional) transactions. See the [Billing & RCM concept page](/concepts/billing) for the full lifecycle.
+  </Card>
+  <Card title="Payments" icon="circle-dollar-to-slot">
+    Remittances posted against claims after payer adjudication, sourced from Electronic Remittance Advice (ERA/835) files or manual entry. Payments close out the revenue cycle for a given claim.
+  </Card>
+</CardGroup>
+
+## API-First Architecture
+
+CodeCrafting Hub is designed API-first, meaning every action available in the dashboard is also available — and fully equivalent — through the REST API. There is no functionality locked behind the UI.
+
+<Steps>
+  <Step title="Authenticate">
+    Obtain a bearer token using your API key via the `/auth/token` endpoint. All subsequent requests are authenticated with this token.
+  </Step>
+  <Step title="Create or sync your Organization and Providers">
+    Your organization is provisioned during onboarding. Use the Providers API to register individual clinicians and sync their NPI records from NPPES.
+  </Step>
+  <Step title="Register Patients">
+    Create patient records with demographics and insurance information before or at the point of care. Assign an `external_id` to map platform patients back to records in your source system.
+  </Step>
+  <Step title="Document Encounters">
+    As clinical visits occur, create Encounter objects with diagnosis and procedure codes. Encounters move through a defined status lifecycle before generating claims.
+  </Step>
+  <Step title="Submit Claims">
+    Trigger claim generation from a completed encounter. The platform validates, encodes, and transmits the claim to the appropriate payer on your behalf.
+  </Step>
+  <Step title="Process Payments & Denials">
+    Inbound ERA files are parsed automatically. Payments are posted and denial workflows are initiated where needed, closing the revenue cycle loop.
+  </Step>
+</Steps>
+
+<Tip>
+  All resources expose a standard set of fields — `id`, `created_at`, `updated_at`, and `metadata` — making it easy to build consistent integrations across resource types.
+</Tip>
+
+## FHIR R4 Compatibility
+
+CodeCrafting Hub maps its core resources to [FHIR R4](https://hl7.org/fhir/R4/) standard resources, enabling interoperability with other health IT systems that speak FHIR. You can both read and write FHIR-formatted resources via the `/fhir/r4/` base path.
+
+| CodeCrafting Hub Resource | FHIR R4 Resource | FHIR Endpoint |
+|---|---|---|
+| Patient | `Patient` | `GET /fhir/r4/Patient/{id}` |
+| Provider | `Practitioner` | `GET /fhir/r4/Practitioner/{id}` |
+| Organization | `Organization` | `GET /fhir/r4/Organization/{id}` |
+| Encounter | `Encounter` | `GET /fhir/r4/Encounter/{id}` |
+| Claim | `Claim` | `GET /fhir/r4/Claim/{id}` |
+| Payment | `PaymentReconciliation` | `GET /fhir/r4/PaymentReconciliation/{id}` |
+
+<Info>
+  FHIR endpoints return resources in `application/fhir+json` format. Native CodeCrafting Hub endpoints return a simplified, opinionated JSON format optimized for developer experience. Both representations reference the same underlying data — use whichever fits your integration best.
+</Info>
+
+<Warning>
+  FHIR write operations (POST, PUT, PATCH) are supported for `Patient`, `Encounter`, and `Claim` resources. However, some CodeCrafting Hub-specific fields (such as `external_id` and RCM workflow state) are only accessible through the native API. If you need full platform functionality, prefer the native endpoints.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Patients" icon="hospital-user" href="/concepts/patients">
+    Explore the patient data model, identifiers, status lifecycle, and privacy controls.
+  </Card>
+  <Card title="Encounters" icon="stethoscope" href="/concepts/encounters">
+    Learn how encounters capture clinical data and drive claim generation.
+  </Card>
+  <Card title="Billing & RCM" icon="file-invoice-dollar" href="/concepts/billing">
+    Understand the full revenue cycle from eligibility verification to payment posting.
+  </Card>
+  <Card title="API Reference" icon="code" href="/api-reference">
+    Browse the complete REST API reference with live request builders.
+  </Card>
+</CardGroup>

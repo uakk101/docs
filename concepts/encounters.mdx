@@ -1,0 +1,173 @@
+---
+title: "Encounters: Clinical Visits, Coding & Claim Generation"
+sidebarTitle: "Encounters"
+description: "Understand how CodeCrafting Hub models clinical encounters, manages the visit lifecycle, and automatically generates claims from completed visits."
+---
+
+An encounter in CodeCrafting Hub represents a single, documented clinical interaction between a patient and a provider. It is the operational heart of the platform — the object where clinical documentation (diagnoses, procedures, notes) meets billing requirements (place of service, charges), ultimately generating the claims that drive your organization's revenue cycle.
+
+## Encounter Types
+
+CodeCrafting Hub supports the encounter types you'll encounter across modern care delivery settings. Specify the type at creation using the `encounter_type` field.
+
+<Tabs>
+  <Tab title="Office Visit">
+    **Value:** `office_visit`  
+    An in-person visit at a clinic or physician's office. Typically billed with Evaluation & Management (E/M) CPT codes (99202–99215). Place of service is usually `11` (Office).
+  </Tab>
+  <Tab title="Telehealth">
+    **Value:** `telehealth`  
+    A synchronous audio/video visit conducted remotely. Use place of service code `02` (Telehealth Provided Other than in Patient's Home) or `10` (Telehealth Provided in Patient's Home) depending on where the patient was located at the time of service.
+  </Tab>
+  <Tab title="Outpatient">
+    **Value:** `outpatient`  
+    Hospital-based outpatient services where the patient is not admitted overnight. Place of service `22` (On Campus – Outpatient Hospital).
+  </Tab>
+  <Tab title="Inpatient">
+    **Value:** `inpatient`  
+    The patient is formally admitted to a hospital or facility. Inpatient encounters typically generate institutional claims (837I) rather than professional claims (837P). Place of service `21` (Inpatient Hospital).
+  </Tab>
+  <Tab title="Emergency">
+    **Value:** `emergency`  
+    Emergency department visits. Place of service `23` (Emergency Room – Hospital). These encounters often require expedited coding and claim submission workflows.
+  </Tab>
+</Tabs>
+
+## Encounter Lifecycle
+
+Every encounter follows a defined status progression from initial documentation through final billing closure.
+
+<Steps>
+  <Step title="draft">
+    The encounter has been created but clinical documentation is incomplete. Draft encounters are editable in full — you can modify all fields including diagnoses, procedures, and provider. A draft encounter does not trigger any billing actions.
+  </Step>
+  <Step title="in-progress">
+    The visit is actively occurring or documentation is underway. The encounter is locked for administrative edits (patient ID, provider NPI) but clinical content (diagnoses, procedures, notes) can still be updated. Transition to `in-progress` by updating the `status` field or when the provider signs an attached note.
+  </Step>
+  <Step title="completed">
+    The visit is over and clinical documentation is finalized. A completed encounter is eligible for claim generation. You can trigger claim creation manually via `POST /encounters/{id}/generate-claim` or configure the platform to do so automatically upon completion.
+  </Step>
+  <Step title="billed">
+    One or more claims have been generated and submitted to a payer from this encounter. The encounter is read-only at this stage. Addendum notes can still be attached, but core clinical data (diagnoses, procedures) requires an amendment workflow to modify.
+  </Step>
+  <Step title="closed">
+    All claims derived from this encounter have reached a terminal billing state (paid, denied with no appeal, or written off). The encounter is fully archived. No further billing actions are possible without reopening via a support workflow.
+  </Step>
+</Steps>
+
+<Warning>
+  Moving an encounter backwards in the lifecycle (e.g., from `completed` back to `in-progress`) is possible via `PATCH /encounters/{id}` only before any claims have been generated. Once a claim exists for an encounter, status reversals require contacting support and will create an audit event.
+</Warning>
+
+## Key Fields
+
+### Patient and Provider
+
+- **`patient_id`** — The `id` of the patient record (`pat_` prefix). Must reference an `active` patient.
+- **`provider_npi`** — The 10-digit National Provider Identifier of the rendering provider. Must match a Provider record in your organization.
+
+### Service Information
+
+- **`service_date`** — The date of service in `YYYY-MM-DD` format. This date, not the encounter creation date, drives claim timely filing rules.
+- **`place_of_service`** — A two-digit CMS Place of Service code. Common values: `11` (Office), `21` (Inpatient Hospital), `22` (Outpatient Hospital), `23` (Emergency Room), `02` (Telehealth).
+
+### Diagnoses (ICD-10)
+
+The `diagnoses` array holds one or more ICD-10-CM codes. The `sequence` field determines primary (`1`) versus secondary diagnosis ordering, which affects claim adjudication and payer reimbursement logic.
+
+```json
+"diagnoses": [
+  {"code": "J06.9", "system": "ICD-10-CM", "sequence": 1, "description": "Acute upper respiratory infection"},
+  {"code": "Z23",   "system": "ICD-10-CM", "sequence": 2, "description": "Encounter for immunization"}
+]
+```
+
+### Procedures (CPT / HCPCS)
+
+The `procedures` array holds procedure codes with associated charges. Each procedure includes a `units` count and a `charge` amount in USD. Procedure `sequence` determines the order in which codes appear on the claim form.
+
+<Note>
+  CodeCrafting Hub validates all CPT and HCPCS codes against the current AMA code set at the time of encounter creation. Retired or invalid codes are rejected with a `422 Unprocessable Entity` response and a descriptive error message.
+</Note>
+
+### Clinical Notes (SOAP Format)
+
+You can attach structured clinical notes to any encounter using the Notes sub-resource (`POST /encounters/{id}/notes`). Notes follow the standard **SOAP** format:
+
+| Section | Field | Description |
+|---|---|---|
+| Subjective | `subjective` | Patient-reported symptoms and history in their own words |
+| Objective | `objective` | Clinician observations, vitals, and examination findings |
+| Assessment | `assessment` | Clinical diagnoses and interpretation of findings |
+| Plan | `plan` | Treatment plan, prescriptions, referrals, and follow-up instructions |
+
+<Tip>
+  Notes are versioned automatically. Each save creates a new note version, and the full version history is accessible at `GET /encounters/{id}/notes/{note_id}/versions`. This supports both clinical correction workflows and compliance audits.
+</Tip>
+
+## Encounter → Claim Relationship
+
+A completed encounter is the source of truth for claim generation. One encounter can produce multiple claims — for example, when services span multiple payers (primary and secondary insurance) or when a facility fee and a professional fee are billed separately.
+
+<Steps>
+  <Step title="Generate a claim from an encounter">
+    Call `POST /encounters/{id}/generate-claim` on any encounter with `status: completed`. The platform validates the encounter data, maps diagnoses and procedures to claim line items, and creates a Claim object linked to the encounter via `encounter_id`.
+  </Step>
+  <Step title="Review the generated claim">
+    The claim starts in `draft` status, giving you a chance to review before submission. Retrieve it with `GET /claims/{claim_id}` and inspect the line items, payer assignment, and charge totals.
+  </Step>
+  <Step title="Submit the claim">
+    Call `POST /claims/{claim_id}/submit` to transmit the claim to the payer. The platform encodes it as an EDI 837P or 837I transaction and handles clearinghouse routing automatically.
+  </Step>
+</Steps>
+
+<Info>
+  You can retrieve all claims associated with an encounter at `GET /encounters/{id}/claims`. An encounter in `billed` or `closed` status will always have at least one associated claim record.
+</Info>
+
+## Sample Encounter Object
+
+```json
+{
+  "id": "enc_01HXA1B2C3D4E5F6G7H8I9J0K",
+  "patient_id": "pat_01HX9Z2K3M4N5P6Q7R8S9T0U",
+  "provider_npi": "1234567890",
+  "service_date": "2024-01-15",
+  "encounter_type": "office_visit",
+  "place_of_service": "11",
+  "status": "completed",
+  "diagnoses": [
+    {
+      "code": "J06.9",
+      "system": "ICD-10-CM",
+      "sequence": 1,
+      "description": "Acute upper respiratory infection"
+    }
+  ],
+  "procedures": [
+    {
+      "code": "99213",
+      "system": "CPT",
+      "sequence": 1,
+      "description": "Office visit, established patient, moderate complexity",
+      "units": 1,
+      "charge": 150.00
+    }
+  ],
+  "created_at": "2024-01-15T14:00:00Z"
+}
+```
+
+## Related Resources
+
+<CardGroup cols={3}>
+  <Card title="Patients" icon="hospital-user" href="/concepts/patients">
+    Patient records referenced by every encounter via `patient_id`.
+  </Card>
+  <Card title="Billing & RCM" icon="file-invoice-dollar" href="/concepts/billing">
+    How completed encounters become submitted claims and posted payments.
+  </Card>
+  <Card title="Encounters API" icon="code" href="/api-reference/encounters">
+    Full API reference including list, create, update, and lifecycle transition endpoints.
+  </Card>
+</CardGroup>

@@ -1,0 +1,269 @@
+---
+title: "Update an Existing Patient Record — PUT /patients/{id}"
+sidebarTitle: "PUT /patients/{id}"
+description: "Replace all updatable fields on a patient record in one request, or use PATCH to apply targeted partial updates to specific fields only."
+---
+
+The Update Patient endpoint lets you replace the demographic and contact data on an existing patient record. Because this endpoint uses the HTTP `PUT` method, it performs a **full replacement** of all updatable fields — any optional field you omit will be cleared from the record. If you only need to change one or two fields without affecting the rest, use `PATCH /patients/{id}` instead, which merges only the fields you supply. Both operations require your API key to carry the `read-write` or `admin` scope.
+
+## Endpoint
+
+```
+PUT https://api.codecraftinghub.com/v1/patients/{id}
+```
+
+<Warning>
+  **PUT replaces all updatable fields.** If you omit optional fields like
+  `email`, `phone`, or `address`, those values will be **cleared** on the
+  record. Use `PATCH /patients/{id}` when you only want to update a subset of
+  fields.
+</Warning>
+
+<Note>
+  **Scope required:** `read-write` or `admin`. Authenticate with
+  `Authorization: Bearer YOUR_API_KEY`.
+</Note>
+
+---
+
+## Path Parameter
+
+<ParamField path="id" type="string" required>
+  The platform-assigned unique identifier of the patient to update, prefixed
+  with `pat_` (e.g., `pat_01HX9Z2K3M4N5P6Q7R8S9T0U`).
+</ParamField>
+
+---
+
+## Request Body
+
+<ParamField body="first_name" type="string" required>
+  Patient's legal first name. Must always be included in a `PUT` request.
+</ParamField>
+
+<ParamField body="last_name" type="string" required>
+  Patient's legal last name. Must always be included in a `PUT` request.
+</ParamField>
+
+<ParamField body="date_of_birth" type="string" required>
+  Patient's date of birth in **ISO 8601** format (`YYYY-MM-DD`). Must always
+  be included in a `PUT` request.
+</ParamField>
+
+<ParamField body="gender" type="string" required>
+  Administrative gender. One of: `male`, `female`, `other`, or `unknown`.
+</ParamField>
+
+<ParamField body="status" type="string">
+  Patient record lifecycle status. One of: `active`, `inactive`, or
+  `deceased`. Defaults to `active` if omitted on PUT.
+</ParamField>
+
+<ParamField body="email" type="string">
+  Patient's updated email address. Omitting this field on a `PUT` request will
+  clear any previously stored email.
+</ParamField>
+
+<ParamField body="phone" type="string">
+  Patient's updated phone number in E.164 or local format. Omitting this field
+  on a `PUT` request will clear any previously stored phone number.
+</ParamField>
+
+<ParamField body="address" type="object">
+  Patient's updated primary mailing address. Omitting this field on a `PUT`
+  request will clear the previously stored address.
+
+  <Expandable title="address fields">
+    <ParamField body="address.line1" type="string" required>
+      Street address line 1.
+    </ParamField>
+    <ParamField body="address.line2" type="string">
+      Apartment, suite, or unit number (optional).
+    </ParamField>
+    <ParamField body="address.city" type="string" required>
+      City name.
+    </ParamField>
+    <ParamField body="address.state" type="string" required>
+      Two-letter US state code (e.g., `TX`).
+    </ParamField>
+    <ParamField body="address.zip" type="string" required>
+      ZIP or postal code.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="external_id" type="string">
+  Your internal system's patient identifier. Omitting this field on a `PUT`
+  will clear the previously stored `external_id`.
+</ParamField>
+
+<ParamField body="race" type="string">
+  Patient's race using an HL7 race code. Omitting this field on a `PUT` will
+  clear the previously stored value.
+</ParamField>
+
+<ParamField body="ethnicity" type="string">
+  Patient's ethnicity using an HL7 ethnicity code. Omitting this field on a
+  `PUT` will clear the previously stored value.
+</ParamField>
+
+<ParamField body="preferred_language" type="string">
+  Patient's preferred language as a BCP 47 language tag. Omitting this field
+  on a `PUT` will clear the previously stored value.
+</ParamField>
+
+---
+
+## Example Requests
+
+### Full Replacement via PUT
+
+<CodeGroup>
+
+```bash cURL
+curl -X PUT https://api.codecraftinghub.com/v1/patients/pat_01HX9Z2K3M4N5P6Q7R8S9T0U \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "first_name": "Jane",
+    "last_name": "Smith-Jones",
+    "date_of_birth": "1985-03-14",
+    "gender": "female",
+    "email": "jane.smithjones@email.com",
+    "phone": "555-867-5309",
+    "address": {
+      "line1": "456 Oak Ave",
+      "city": "Austin",
+      "state": "TX",
+      "zip": "78702"
+    }
+  }'
+```
+
+```python Python
+import requests
+
+patient_id = "pat_01HX9Z2K3M4N5P6Q7R8S9T0U"
+url = f"https://api.codecraftinghub.com/v1/patients/{patient_id}"
+headers = {
+    "Authorization": "Bearer YOUR_API_KEY",
+    "Content-Type": "application/json",
+}
+payload = {
+    "first_name": "Jane",
+    "last_name": "Smith-Jones",
+    "date_of_birth": "1985-03-14",
+    "gender": "female",
+    "email": "jane.smithjones@email.com",
+    "phone": "555-867-5309",
+    "address": {
+        "line1": "456 Oak Ave",
+        "city": "Austin",
+        "state": "TX",
+        "zip": "78702",
+    },
+}
+
+response = requests.put(url, json=payload, headers=headers)
+updated_patient = response.json()
+print(updated_patient["last_name"])  # Smith-Jones
+```
+
+</CodeGroup>
+
+### Partial Update via PATCH
+
+Use `PATCH` when you only need to modify specific fields. Only the fields you
+include in the request body are changed — all others remain untouched.
+
+<CodeGroup>
+
+```bash cURL
+curl -X PATCH https://api.codecraftinghub.com/v1/patients/pat_01HX9Z2K3M4N5P6Q7R8S9T0U \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "newemail@example.com"}'
+```
+
+```python Python
+import requests
+
+patient_id = "pat_01HX9Z2K3M4N5P6Q7R8S9T0U"
+url = f"https://api.codecraftinghub.com/v1/patients/{patient_id}"
+headers = {
+    "Authorization": "Bearer YOUR_API_KEY",
+    "Content-Type": "application/json",
+}
+
+# Only the email is changed; all other fields are preserved
+response = requests.patch(url, json={"email": "newemail@example.com"}, headers=headers)
+updated_patient = response.json()
+print(updated_patient["email"])  # newemail@example.com
+```
+
+</CodeGroup>
+
+---
+
+## Response
+
+### 200 OK
+
+Both `PUT` and `PATCH` return `200 OK` with the full updated patient object
+upon success.
+
+```json
+{
+  "id": "pat_01HX9Z2K3M4N5P6Q7R8S9T0U",
+  "mrn": "MRN-00042",
+  "first_name": "Jane",
+  "last_name": "Smith-Jones",
+  "date_of_birth": "1985-03-14",
+  "gender": "female",
+  "email": "jane.smithjones@email.com",
+  "phone": "555-867-5309",
+  "address": {
+    "line1": "456 Oak Ave",
+    "city": "Austin",
+    "state": "TX",
+    "zip": "78702"
+  },
+  "external_id": "EHR-PAT-9871",
+  "status": "active",
+  "created_at": "2024-01-15T10:30:00Z",
+  "updated_at": "2024-01-15T14:22:10Z"
+}
+```
+
+<ResponseField name="id" type="string">
+  The patient's immutable platform ID. This value never changes regardless of
+  how many updates are applied.
+</ResponseField>
+
+<ResponseField name="mrn" type="string">
+  The patient's Medical Record Number. MRNs are assigned at creation and are
+  never modified by update operations.
+</ResponseField>
+
+<ResponseField name="updated_at" type="string">
+  ISO 8601 timestamp reflecting when this update was applied. Use this to
+  detect whether a record has changed since your last sync.
+</ResponseField>
+
+---
+
+### Error Responses
+
+| Status | Error Code         | Description                                                               |
+| ------ | ------------------ | ------------------------------------------------------------------------- |
+| `404`  | `not_found`        | No patient exists with the given ID.                                      |
+| `422`  | `validation_error` | One or more fields failed validation (see `details` in the response body).|
+| `403`  | `forbidden`        | Your API key does not have `read-write` or `admin` scope.                |
+| `401`  | `unauthorized`     | Missing or invalid `Authorization` header.                                |
+
+<Tip>
+  When marking a patient as `deceased`, include `"status": "deceased"` in your
+  `PUT` or `PATCH` body. This status is used downstream in claims adjudication
+  and quality reporting workflows — setting it accurately prevents erroneous
+  outreach and billing activity.
+</Tip>

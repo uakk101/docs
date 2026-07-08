@@ -1,0 +1,142 @@
+---
+title: "Rate Limits — CodeCrafting Hub REST API"
+sidebarTitle: "Rate Limits"
+description: "Understand per-key request quotas, rate limit response headers, 429 error handling, and best practices like exponential backoff."
+---
+
+The CodeCrafting Hub API enforces rate limits to ensure stable, fair performance for every customer on the platform. When you exceed your quota, the API returns a `429 Too Many Requests` response rather than processing the request. Understanding the limits that apply to your plan — and implementing a well-behaved retry strategy — keeps your integration running smoothly.
+
+## Default Limits
+
+Every API key is subject to two independent limits that are both enforced simultaneously:
+
+- **Rate limit window:** 1,000 requests per minute
+- **Burst limit:** 100 requests per second
+
+Exceeding either limit triggers a `429` response for that request. The per-minute window resets on a rolling basis, not at a fixed clock boundary.
+
+## Limits by Plan Tier
+
+Your effective limits depend on the plan associated with your account. The table below summarizes the defaults for each tier:
+
+| Plan           | Requests / Minute | Requests / Second | Notes                        |
+|----------------|:-----------------:|:-----------------:|------------------------------|
+| Starter        | 500               | 50                | Best for development & testing |
+| Professional   | 1,000             | 100               | Default production limits     |
+| Enterprise     | Custom            | Custom            | Contact sales to configure    |
+
+<Note>
+  Enterprise customers can request per-endpoint limit adjustments — for example, a higher eligibility check quota — as part of their contract. Reach out to your account manager to discuss your throughput needs.
+</Note>
+
+## Endpoint-Specific Limits
+
+Some endpoints that involve expensive third-party calls or bulk processing carry stricter limits regardless of your plan tier:
+
+| Endpoint                         | Limit          |
+|----------------------------------|----------------|
+| `POST /eligibility/checks`       | 100 req / min  |
+| `POST /bulk-export`              | 10 req / min   |
+
+<Warning>
+  Endpoint-specific limits stack on top of your plan-level limits. If your plan allows 1,000 req/min but the eligibility endpoint caps at 100 req/min, you cannot exceed 100 eligibility checks per minute even when overall headroom remains.
+</Warning>
+
+## Rate Limit Headers
+
+The API includes rate limit information in the headers of **every response**, not just on errors. Read these headers to track your consumption in real time:
+
+| Header                  | Description                                                         |
+|-------------------------|---------------------------------------------------------------------|
+| `X-RateLimit-Limit`     | Total requests allowed in the current window                        |
+| `X-RateLimit-Remaining` | Requests remaining in the current window                            |
+| `X-RateLimit-Reset`     | Unix timestamp (UTC) at which the current window resets             |
+| `Retry-After`           | Seconds to wait before retrying — **only present on 429 responses** |
+
+A typical successful response header set looks like this:
+
+```
+X-RateLimit-Limit: 1000
+X-RateLimit-Remaining: 847
+X-RateLimit-Reset: 1718460120
+```
+
+## 429 Too Many Requests
+
+When you exceed your rate limit, the API returns an HTTP `429` status with a JSON body and a `Retry-After` header telling you exactly how long to wait:
+
+```
+HTTP/1.1 429 Too Many Requests
+Retry-After: 60
+X-RateLimit-Limit: 1000
+X-RateLimit-Remaining: 0
+X-RateLimit-Reset: 1718460120
+Content-Type: application/json
+```
+
+```json
+{
+  "error": "rate_limit_exceeded",
+  "message": "Too many requests. Please retry after 60 seconds.",
+  "status": 429,
+  "request_id": "req_01HXE1F2G3H4I5J6K7L8M9N0O"
+}
+```
+
+<Tip>
+  Always read the `Retry-After` header value rather than hard-coding a wait time. The actual reset interval can vary based on your plan and the specific limit that was triggered.
+</Tip>
+
+## Handling Rate Limits: Best Practices
+
+### Implement Exponential Backoff
+
+When you receive a `429`, wait and retry rather than immediately re-sending the request. Exponential backoff — where the wait time doubles with each failed attempt — prevents a thundering-herd effect that would just re-trigger the limit:
+
+<CodeGroup>
+```python Python
+import time
+import requests
+
+def api_call_with_retry(url, headers, max_retries=3):
+    for attempt in range(max_retries):
+        response = requests.get(url, headers=headers)
+        if response.status_code == 429:
+            wait = 2 ** attempt  # 1s, 2s, 4s
+            time.sleep(wait)
+            continue
+        return response
+    raise Exception("Max retries exceeded")
+```
+
+```javascript Node.js
+async function apiCallWithRetry(url, headers, maxRetries = 3) {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const response = await fetch(url, { headers });
+    if (response.status === 429) {
+      const wait = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
+      await new Promise((resolve) => setTimeout(resolve, wait));
+      continue;
+    }
+    return response;
+  }
+  throw new Error("Max retries exceeded");
+}
+```
+</CodeGroup>
+
+<Note>
+  Add a small amount of random jitter (for example, ±200 ms) to your backoff wait times when running multiple parallel workers. Jitter prevents all workers from retrying at the exact same moment and re-triggering the limit together.
+</Note>
+
+### Cache Eligibility Responses
+
+Eligibility checks are subject to the tightest per-endpoint limit (100 req/min) because each check involves a real-time payer inquiry. Where your workflow permits, cache the response for a patient's active coverage and reuse it for encounters on the same day or same visit. Most payer responses remain valid for 24 hours.
+
+### Batch Where Possible
+
+Instead of issuing one API call per record in a tight loop, use bulk endpoints (where available) or paginate large reads with the maximum `per_page=100` to reduce total request count. See the [Pagination](/api-reference/pagination) guide for details.
+
+### Monitor `X-RateLimit-Remaining`
+
+Proactively track remaining headroom in every response. If `X-RateLimit-Remaining` drops below a threshold you define (for example, 10% of `X-RateLimit-Limit`), introduce a brief pause in your request loop before you hit zero — this avoids a hard stop and keeps latency predictable.
